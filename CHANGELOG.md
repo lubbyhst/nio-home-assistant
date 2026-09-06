@@ -7,6 +7,14 @@ Use this before releases and when opening PRs.
 
 - Prepare and maintain this public changelog file for HACS users.
 
+## 0.1.0-dev8
+
+- Record a revision for the requested NIO OAuth scope set.
+- Prompt existing installations through Home Assistant's native reauthentication
+  flow once when the integration's requested permissions expand.
+- Avoid relying on the provider returning a complete `scope` field in token
+  responses, preventing false or repeating reauthentication prompts.
+
 ## 0.1.0-dev7
 
 - Avoid hard-failing setup when an optional endpoint is blocked by missing OAuth

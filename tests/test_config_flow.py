@@ -6,9 +6,11 @@ from homeassistant.data_entry_flow import FlowResultType
 
 from custom_components.nio_telematics.config_flow import NioConfigFlow
 from custom_components.nio_telematics.const import (
+    CONF_SCOPE_REVISION,
     CONF_VEHICLE_NAME,
     CONF_VIN,
     DOMAIN,
+    OAUTH_SCOPE_REVISION,
 )
 
 
@@ -32,3 +34,17 @@ async def test_vehicle_step_rejects_invalid_vin(hass: HomeAssistant) -> None:
     )
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {CONF_VIN: "invalid_vin"}
+
+
+async def test_oauth_records_current_scope_revision(hass: HomeAssistant) -> None:
+    """A completed OAuth grant records the requested permission generation."""
+    handler = NioConfigFlow()
+    handler.hass = hass
+    handler.context = {"source": config_entries.SOURCE_USER}
+
+    result = await handler.async_oauth_create_entry(
+        {"auth_implementation": "local", "token": {}}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert handler._oauth_data[CONF_SCOPE_REVISION] == OAUTH_SCOPE_REVISION

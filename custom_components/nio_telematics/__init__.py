@@ -4,10 +4,16 @@ from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import config_entry_oauth2_flow
 
 from .api import NioApiClient
-from .const import API_BASE_URL, PLATFORMS
+from .const import (
+    API_BASE_URL,
+    CONF_SCOPE_REVISION,
+    OAUTH_SCOPE_REVISION,
+    PLATFORMS,
+)
 from .coordinator import NioDataUpdateCoordinator
 
 type NioConfigEntry = ConfigEntry[NioDataUpdateCoordinator]
@@ -15,6 +21,10 @@ type NioConfigEntry = ConfigEntry[NioDataUpdateCoordinator]
 
 async def async_setup_entry(hass: HomeAssistant, entry: NioConfigEntry) -> bool:
     """Set up NIO Open Telematics from a config entry."""
+    if entry.data.get(CONF_SCOPE_REVISION) != OAUTH_SCOPE_REVISION:
+        raise ConfigEntryAuthFailed(
+            "NIO telemetry permissions have changed; reauthentication is required"
+        )
     implementation = (
         await config_entry_oauth2_flow.async_get_config_entry_implementation(
             hass, entry

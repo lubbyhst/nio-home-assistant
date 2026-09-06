@@ -14,6 +14,7 @@ TELEMATICS_PATH: Final = "/api/1/telematics"
 
 CONF_VIN: Final = "vin"
 CONF_VEHICLE_NAME: Final = "vehicle_name"
+CONF_SCOPE_REVISION: Final = "scope_revision"
 
 OAUTH_SCOPES: Final = [
     "vehicle:connectivity:read",
@@ -26,6 +27,7 @@ OAUTH_SCOPES: Final = [
     "vehicle:diagnostics:read",
     "aftersales:read",
 ]
+OAUTH_SCOPE_REVISION: Final = 1
 
 DEFAULT_SCAN_INTERVAL: Final = timedelta(minutes=10)
 ATTR_EVENT_TIME: Final = "event_time"

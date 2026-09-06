@@ -15,7 +15,7 @@ supported integration, or affiliated with NIO, Home Assistant, or OpenAI.
 It is experimental software. Review it, protect your credentials and vehicle
 data, and use it at your own risk.
 
-Current development milestone (`0.1.0-dev7`):
+Current development milestone (`0.1.0-dev8`):
 
 - polls every documented read-only telemetry category that can provide useful
   Home Assistant state: body, dynamics, location, trip, energy, cabin,
@@ -65,8 +65,10 @@ Authorization Code + PKCE, NIO's HTTP Basic token exchange, wrapped token
 response, and automatic refresh through Home Assistant's OAuth session. The
 official reference exposes vehicle telemetry by VIN and does not document a
 vehicle-list endpoint, so setup validates a manually entered VIN after consent.
-If API scopes or permissions are changed, Home Assistant will now request a
-clean reauthorization flow automatically.
+When the integration's requested API scopes change, Home Assistant requests a
+single native reauthorization flow and records the permission revision after it
+completes. Individual optional feeds that NIO still denies remain isolated as
+`permission_denied` rather than taking the integration offline.
 Automated tests, hassfest, and HACS repository validation run on every push.
 
 Never commit a Client ID, Client Secret, VIN, access token, refresh token, or

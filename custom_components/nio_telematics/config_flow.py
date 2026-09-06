@@ -9,7 +9,13 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.helpers import config_entry_oauth2_flow
 
-from .const import CONF_VEHICLE_NAME, CONF_VIN, DOMAIN
+from .const import (
+    CONF_SCOPE_REVISION,
+    CONF_VEHICLE_NAME,
+    CONF_VIN,
+    DOMAIN,
+    OAUTH_SCOPE_REVISION,
+)
 from .models import normalize_vin
 
 
@@ -35,6 +41,7 @@ class NioConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=D
         self, data: dict[str, Any]
     ) -> config_entries.ConfigFlowResult:
         """Collect the vehicle identity after OAuth and create the entry."""
+        data = {**data, CONF_SCOPE_REVISION: OAUTH_SCOPE_REVISION}
         if self.source == config_entries.SOURCE_REAUTH:
             reauth_entry = self._get_reauth_entry()
             return self.async_update_reload_and_abort(
