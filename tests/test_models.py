@@ -1,7 +1,7 @@
 """Tests for verified NIO payload parsing."""
 
-from datetime import UTC, datetime
 import unittest
+from datetime import UTC, datetime
 
 from _load import load_module
 
@@ -73,7 +73,9 @@ class TestNioModels(unittest.TestCase):
         self.assertEqual(status.event_time, newest.event_time)
 
     def test_vin_normalization(self) -> None:
-        self.assertEqual(models.normalize_vin("  ljnabc12345678901 "), "LJNABC12345678901")
+        self.assertEqual(
+            models.normalize_vin("  ljnabc12345678901 "), "LJNABC12345678901"
+        )
 
     def test_invalid_vin_is_rejected(self) -> None:
         for vin in ("short", "LJNABC1234567890I", "LJNABC1234567890O"):

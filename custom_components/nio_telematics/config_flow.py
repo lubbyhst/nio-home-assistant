@@ -6,7 +6,6 @@ import logging
 from typing import Any, override
 
 import voluptuous as vol
-
 from homeassistant import config_entries
 from homeassistant.helpers import config_entry_oauth2_flow
 
@@ -14,9 +13,7 @@ from .const import CONF_VEHICLE_NAME, CONF_VIN, DOMAIN
 from .models import normalize_vin
 
 
-class NioConfigFlow(
-    config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMAIN
-):
+class NioConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMAIN):
     """Configure a NIO vehicle through OAuth Authorization Code + PKCE."""
 
     VERSION = 1

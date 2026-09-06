@@ -15,12 +15,12 @@ type NioConfigEntry = ConfigEntry[NioDataUpdateCoordinator]
 
 async def async_setup_entry(hass: HomeAssistant, entry: NioConfigEntry) -> bool:
     """Set up NIO Open Telematics from a config entry."""
-    implementation = await config_entry_oauth2_flow.async_get_config_entry_implementation(
-        hass, entry
+    implementation = (
+        await config_entry_oauth2_flow.async_get_config_entry_implementation(
+            hass, entry
+        )
     )
-    oauth_session = config_entry_oauth2_flow.OAuth2Session(
-        hass, entry, implementation
-    )
+    oauth_session = config_entry_oauth2_flow.OAuth2Session(hass, entry, implementation)
     client = NioApiClient(
         oauth_session,
         API_BASE_URL,

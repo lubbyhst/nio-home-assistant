@@ -4,12 +4,12 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
+from custom_components.nio_telematics.config_flow import NioConfigFlow
 from custom_components.nio_telematics.const import (
     CONF_VEHICLE_NAME,
     CONF_VIN,
     DOMAIN,
 )
-from custom_components.nio_telematics.config_flow import NioConfigFlow
 
 
 async def test_missing_application_credentials(hass: HomeAssistant) -> None:

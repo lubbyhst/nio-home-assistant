@@ -43,6 +43,7 @@ async def async_get_config_entry_diagnostics(
                         "charging_target": coordinator.data.soc_status.charging_target,
                     }.items()
                 },
+                "endpoint_status": coordinator.data.endpoint_status,
             },
             TO_REDACT,
         ),

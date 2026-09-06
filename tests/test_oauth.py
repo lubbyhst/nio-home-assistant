@@ -30,7 +30,8 @@ class TestNioOAuthEnvelope(unittest.TestCase):
             {"result_code": "success", "data": {"access_token": "access"}},
         )
         for payload in payloads:
-            with self.subTest(payload=payload), self.assertRaises(
-                oauth.InvalidTokenResponseError
+            with (
+                self.subTest(payload=payload),
+                self.assertRaises(oauth.InvalidTokenResponseError),
             ):
                 oauth.unwrap_token_response(payload)

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-import re
 from typing import Any
 
 _VIN_PATTERN = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$")
@@ -108,3 +108,5 @@ class NioVehicleData:
     vin: str
     soc_status: NioSocStatus
     fetched_at: datetime
+    telemetry: dict[str, dict[str, Any]]
+    endpoint_status: dict[str, str]

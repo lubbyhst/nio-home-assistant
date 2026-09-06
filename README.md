@@ -15,15 +15,50 @@ supported integration, or affiliated with NIO, Home Assistant, or OpenAI.
 It is experimental software. Review it, protect your credentials and vehicle
 data, and use it at your own risk.
 
-Current milestone:
+Current development milestone (`0.1.0-dev5`):
 
-- parses official SoC status fields;
-- creates battery, range, charging-state, target, current, and data-timestamp
-  sensors;
+- polls every documented read-only telemetry category that can provide useful
+  Home Assistant state: body, dynamics, location, trip, energy, cabin,
+  powertrain, diagnostics, and aftersales odometer data;
+- creates 64 stable scalar sensors and 16 disabled diagnostic endpoint sensors;
+- preserves variable-length/nested data such as battery cells, motor lists,
+  window faults, door structures, and alarm signals as attributes on the
+  corresponding disabled diagnostic sensor;
 - uses one coordinator and one Home Assistant device per VIN;
 - redacts credentials and vehicle identifiers from diagnostics;
 - handles authentication, permission, rate-limit, envelope, and transport
-  errors separately.
+  errors separately, and keeps unavailable optional feeds from breaking feeds
+  that do work.
+
+Most detailed entities are disabled by default to avoid flooding a new Home
+Assistant installation. Enable the ones you need on the NIO device page. The
+existing battery/range/charging entities keep their original IDs; odometer is
+the only newly enabled-by-default entity.
+
+## Live API status
+
+The table below is based on hands-on testing against one EU NIO ET5 Touring,
+not on what the API merely promises. Other vehicle models or accounts may
+behave differently.
+
+| Data | Implemented | Observed result |
+|---|---:|---|
+| OAuth authorization, refresh and user info | Yes | Working |
+| Latest vehicle timestamp/state/mileage | Yes | Working; timestamp and mileage advanced after driving |
+| Battery SoC in latest vehicle status | Yes | Returned `0` instead of the vehicle's real SoC |
+| Charging state, battery current/voltage | Yes | Missing, null, or zero in the latest-status response |
+| SoC/range/charging-target change feed | Yes | `resource_not_found`, including after driving and an observed 2% discharge |
+| Body, lights, windows, driving, position, trips, cell/extremum, cabin, motor, alarms | Yes in dev5 | Awaiting live verification after expanded-scope authorization |
+| Aftersales odometer reports | Yes in dev5 | Awaiting live verification after expanded-scope authorization |
+
+The VIN was independently verified because vehicle state and mileage were
+correct. The same energy failures were reproduced directly in Postman with a
+fresh OAuth token and all personal-application scopes, so they are not currently
+explained by Home Assistant parsing or polling. A detailed case has been sent
+to NIO and feedback is still pending. If you have faster access to NIO's Open
+Telematics API support or can test another eligible EU vehicle, please open a
+GitHub issue and help move the investigation forward. Never post credentials,
+tokens, a full VIN, or precise location data.
 
 The config flow now uses locally supplied NIO application credentials, OAuth
 Authorization Code + PKCE, NIO's HTTP Basic token exchange, wrapped token
@@ -31,7 +66,7 @@ response, and automatic refresh through Home Assistant's OAuth session. The
 official reference exposes vehicle telemetry by VIN and does not document a
 vehicle-list endpoint, so setup validates a manually entered VIN after consent.
 Automated tests, hassfest, and HACS repository validation run on every push.
-Real-credential testing and a tagged release must still be completed before the
+Expanded endpoint testing and a tagged release must still be completed before the
 integration is ready for normal installation through HACS.
 
 Never commit a Client ID, Client Secret, VIN, access token, refresh token, or

@@ -8,7 +8,6 @@ import time
 from typing import Any
 
 from aiohttp import ClientError, ClientResponse
-
 from homeassistant.helpers.config_entry_oauth2_flow import OAuth2Session
 
 from .const import TELEMATICS_PATH
@@ -133,8 +132,7 @@ class NioApiClient:
                     path,
                     params={
                         "start_time": (
-                            end_milliseconds
-                            - window_seconds * _MILLISECONDS_PER_SECOND
+                            end_milliseconds - window_seconds * _MILLISECONDS_PER_SECOND
                         ),
                         "end_time": end_milliseconds,
                     },
@@ -172,23 +170,52 @@ class NioApiClient:
         ]
         return NioSocStatus.merge(*statuses)
 
-    async def async_get_latest_vehicle_status(self, vin: str) -> NioSocStatus:
-        """Return the latest overall vehicle status snapshot."""
+    async def async_get_change_record(self, vin: str, resource: str) -> dict[str, Any]:
+        """Return the newest record from a documented change endpoint."""
+        payload = await self._async_get(
+            f"{TELEMATICS_PATH}/vehicles/{vin}/{resource}/changes"
+        )
+        data = payload.get("data")
+        if not isinstance(data, list) or not data:
+            raise NioResourceNotFoundError("NIO returned no telemetry records")
+        records = [item for item in data if isinstance(item, dict)]
+        if not records:
+            raise NioApiError("NIO returned an invalid telemetry payload")
+        return max(records, key=lambda item: item.get("sample_timestamp", 0))
+
+    async def async_get_latest_vehicle_record(self, vin: str) -> dict[str, Any]:
+        """Return the unmodified latest vehicle-status record."""
         payload = await self._async_get(
             f"{TELEMATICS_PATH}/vehicles/{vin}/vehicle_status/latest"
         )
         data = payload.get("data")
         if not isinstance(data, dict):
             raise NioApiError("NIO returned an invalid vehicle status payload")
+        return data
+
+    async def async_get_odometer_report(self, vin: str) -> dict[str, Any]:
+        """Return the newest documented aftersales odometer report."""
+        payload = await self._async_get(
+            f"{TELEMATICS_PATH}/aftersales/vehicles/{vin}/odometer_reports"
+        )
+        data = payload.get("data")
+        if not isinstance(data, list) or not data:
+            raise NioResourceNotFoundError("NIO returned no odometer reports")
+        records = [item for item in data if isinstance(item, dict)]
+        if not records:
+            raise NioApiError("NIO returned an invalid odometer payload")
+        return max(records, key=lambda item: str(item.get("recorded_at", "")))
+
+    async def async_get_latest_vehicle_status(self, vin: str) -> NioSocStatus:
+        """Return the latest overall vehicle status snapshot."""
+        data = await self.async_get_latest_vehicle_record(vin)
         _LOGGER.debug("NIO latest vehicle response fields: %s", sorted(data))
         return NioSocStatus.from_payload(data)
 
     async def _async_get(
         self, path: str, *, params: dict[str, int] | None = None
     ) -> dict[str, Any]:
-        request_kwargs: dict[str, Any] = {
-            "headers": {"Accept": "application/json"}
-        }
+        request_kwargs: dict[str, Any] = {"headers": {"Accept": "application/json"}}
         if params is not None:
             request_kwargs["params"] = params
         try:
@@ -253,7 +280,11 @@ class NioApiClient:
             raise NioPermissionError("NIO OAuth grant lacks the required scope")
         if response.status == 429:
             raw_retry_after = response.headers.get("Retry-After")
-            retry_after = int(raw_retry_after) if raw_retry_after and raw_retry_after.isdigit() else None
+            retry_after = (
+                int(raw_retry_after)
+                if raw_retry_after and raw_retry_after.isdigit()
+                else None
+            )
             raise NioRateLimitError(retry_after)
         if response.status >= 400:
             raise NioApiError(f"NIO API returned HTTP {response.status}")

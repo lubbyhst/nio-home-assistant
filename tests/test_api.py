@@ -25,7 +25,9 @@ def response(status: int, payload: dict, headers: dict | None = None) -> MagicMo
 async def test_soc_request_uses_largest_window_and_newest_record(
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr("custom_components.nio_telematics.api.time.time", lambda: 2_000_000)
+    monkeypatch.setattr(
+        "custom_components.nio_telematics.api.time.time", lambda: 2_000_000
+    )
     oauth_session = MagicMock()
     oauth_session.async_request = AsyncMock(
         return_value=response(
@@ -53,9 +55,7 @@ async def test_soc_request_uses_largest_window_and_newest_record(
     assert status.charging_target == 80
     request = oauth_session.async_request.await_args
     assert request.args[0] == "GET"
-    assert request.args[1].endswith(
-        "/vehicles/LJNABC12345678901/soc_status/changes"
-    )
+    assert request.args[1].endswith("/vehicles/LJNABC12345678901/soc_status/changes")
     assert request.kwargs["params"] == {
         "start_time": 1_956_800_000,
         "end_time": 2_000_000_000,
@@ -66,7 +66,9 @@ async def test_soc_request_uses_largest_window_and_newest_record(
 async def test_soc_request_retries_and_caches_smaller_window(
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr("custom_components.nio_telematics.api.time.time", lambda: 2_000_000)
+    monkeypatch.setattr(
+        "custom_components.nio_telematics.api.time.time", lambda: 2_000_000
+    )
     oauth_session = MagicMock()
     oauth_session.async_request = AsyncMock(
         side_effect=[
@@ -133,9 +135,31 @@ async def test_latest_vehicle_status_uses_snapshot_endpoint() -> None:
 
     assert status.soc == 52
     request = oauth_session.async_request.await_args
-    assert request.args[1].endswith(
-        "/vehicles/LJNABC12345678901/vehicle_status/latest"
+    assert request.args[1].endswith("/vehicles/LJNABC12345678901/vehicle_status/latest")
+
+
+async def test_generic_change_endpoint_returns_newest_record() -> None:
+    oauth_session = MagicMock()
+    oauth_session.async_request = AsyncMock(
+        return_value=response(
+            200,
+            {
+                "result_code": "success",
+                "data": [
+                    {"vehicle_lock_status": "0", "sample_timestamp": 1000},
+                    {"vehicle_lock_status": "1", "sample_timestamp": 2000},
+                ],
+            },
+        )
     )
+    client = NioApiClient(oauth_session, API_BASE_URL)
+
+    record = await client.async_get_change_record("LJNABC12345678901", "door_status")
+
+    assert record["vehicle_lock_status"] == "1"
+    request = oauth_session.async_request.await_args
+    assert request.args[1].endswith("/vehicles/LJNABC12345678901/door_status/changes")
+    assert "params" not in request.kwargs
 
 
 async def test_debug_trace_is_complete_but_redacts_sensitive_data(caplog) -> None:
@@ -159,9 +183,7 @@ async def test_debug_trace_is_complete_but_redacts_sensitive_data(caplog) -> Non
     )
     client = NioApiClient(oauth_session, API_BASE_URL)
 
-    with caplog.at_level(
-        logging.DEBUG, logger="custom_components.nio_telematics.api"
-    ):
+    with caplog.at_level(logging.DEBUG, logger="custom_components.nio_telematics.api"):
         await client.async_get_latest_vehicle_status("LJNABC12345678901")
 
     trace = caplog.text
@@ -207,9 +229,7 @@ async def test_envelope_access_denied_is_mapped() -> None:
 )
 async def test_http_errors_are_mapped(status, headers, error) -> None:
     oauth_session = MagicMock()
-    oauth_session.async_request = AsyncMock(
-        return_value=response(status, {}, headers)
-    )
+    oauth_session.async_request = AsyncMock(return_value=response(status, {}, headers))
     client = NioApiClient(oauth_session, API_BASE_URL)
     with pytest.raises(error):
         await client.async_get_soc_status("LJNABC12345678901")

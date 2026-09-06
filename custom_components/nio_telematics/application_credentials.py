@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from http import HTTPStatus
 import logging
+from http import HTTPStatus
 from typing import Any, cast, override
 
 from aiohttp import BasicAuth, ClientResponseError
-
 from homeassistant.components.application_credentials import ClientCredential
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import (
@@ -66,8 +65,7 @@ class NioOAuth2Implementation(LocalOAuth2ImplementationWithPkce):
                 except (ValueError, TypeError):
                     error_payload = {}
                 _LOGGER.error(
-                    "NIO token request failed: HTTP %s, result_code=%s, "
-                    "request_id=%s",
+                    "NIO token request failed: HTTP %s, result_code=%s, request_id=%s",
                     response.status,
                     error_payload.get("result_code", error_payload.get("error")),
                     error_payload.get("request_id"),
