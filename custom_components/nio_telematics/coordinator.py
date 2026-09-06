@@ -101,6 +101,11 @@ class NioDataUpdateCoordinator(DataUpdateCoordinator[NioVehicleData]):
             except NioApiError as err:
                 endpoint_status["odometer_report"] = type(err).__name__
         except (NioAuthenticationError, NioPermissionError) as err:
+            if isinstance(err, NioPermissionError):
+                raise ConfigEntryAuthFailed(
+                    "The NIO token is not authorized for all requested scopes. "
+                    "Please reauthenticate this integration to refresh permissions."
+                ) from err
             raise ConfigEntryAuthFailed(str(err)) from err
         except NioApiError as err:
             raise UpdateFailed(str(err)) from err

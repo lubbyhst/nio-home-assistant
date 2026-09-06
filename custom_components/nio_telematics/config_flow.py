@@ -44,6 +44,16 @@ class NioConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=D
         self._oauth_data = data
         return await self.async_step_vehicle()
 
+    async def async_step_reauth(
+        self, _user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Re-run OAuth flow when the existing token/scopes are no longer valid."""
+        self._get_reauth_entry()
+        # Reuse the normal authorization flow and return directly to Home Assistant's
+        # OAuth callback on completion. The token update is handled in
+        # async_oauth_create_entry when source == SOURCE_REAUTH.
+        return await self.async_step_user()
+
     async def async_step_vehicle(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
