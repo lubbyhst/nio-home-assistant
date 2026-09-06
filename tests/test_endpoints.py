@@ -20,6 +20,6 @@ class TestNioEndpoints(unittest.TestCase):
         )
         self.assertEqual(const.API_BASE_URL, "https://open-api-eu.nio.com")
 
-    def test_scope_policy_revision_uses_provider_default(self) -> None:
-        """Changing to NIO's full-permission default triggers reauthorization."""
-        self.assertEqual(const.OAUTH_SCOPE_REVISION, 2)
+    def test_scope_policy_revision_triggers_reauthorization(self) -> None:
+        """Changing the explicit scope set triggers reauthorization."""
+        self.assertEqual(const.OAUTH_SCOPE_REVISION, 3)

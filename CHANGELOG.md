@@ -7,6 +7,13 @@ Use this before releases and when opening PRs.
 
 - Prepare and maintain this public changelog file for HACS users.
 
+## 0.1.1-dev.2
+
+- Request the NIO application's supported read-only scopes explicitly,
+  including the required `vehicle:read` scope.
+- Advance the permission-policy revision so existing installations receive the
+  corrected authorization request through native reauthentication.
+
 ## 0.1.1-dev.1
 
 - Add one enabled diagnostic `API availability` sensor that summarizes all
