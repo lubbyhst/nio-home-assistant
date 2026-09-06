@@ -20,7 +20,7 @@ from homeassistant.helpers.config_entry_oauth2_flow import (
     LocalOAuth2ImplementationWithPkce,
 )
 
-from .const import AUTHORIZE_PATH, OAUTH_BASE_URL, OAUTH_SCOPES, TOKEN_PATH
+from .const import AUTHORIZE_PATH, OAUTH_BASE_URL, TOKEN_PATH
 from .oauth import unwrap_token_response
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,13 +28,6 @@ _LOGGER = logging.getLogger(__name__)
 
 class NioOAuth2Implementation(LocalOAuth2ImplementationWithPkce):
     """Handle NIO's PKCE, Basic authentication, and wrapped token envelope."""
-
-    @property
-    @override
-    def extra_authorize_data(self) -> dict[str, str]:
-        data = {"scope": " ".join(OAUTH_SCOPES)}
-        data.update(super().extra_authorize_data)
-        return data
 
     @override
     async def _async_refresh_token(self, token: dict[str, Any]) -> dict[str, Any]:

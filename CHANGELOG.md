@@ -7,6 +7,15 @@ Use this before releases and when opening PRs.
 
 - Prepare and maintain this public changelog file for HACS users.
 
+## 0.1.0-dev10
+
+- Omit the OAuth `scope` parameter so NIO grants the application's full
+  permitted scope set, as defined by the provider's default behavior.
+- Avoid `invalid_scope` failures caused when an explicit combined scope list
+  contains a permission unavailable to the application.
+- Advance the permission-policy revision so existing installations receive the
+  corrected native reauthentication prompt.
+
 ## 0.1.0-dev9
 
 - Fix scope reauthorization started from Home Assistant Repairs by explicitly

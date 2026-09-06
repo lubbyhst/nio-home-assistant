@@ -20,18 +20,6 @@ class TestNioEndpoints(unittest.TestCase):
         )
         self.assertEqual(const.API_BASE_URL, "https://open-api-eu.nio.com")
 
-    def test_all_read_only_telemetry_scopes_are_requested(self) -> None:
-        self.assertEqual(
-            set(const.OAUTH_SCOPES),
-            {
-                "vehicle:connectivity:read",
-                "vehicle:body:read",
-                "vehicle:dynamics:read",
-                "vehicle:location:read",
-                "vehicle:energy:read",
-                "vehicle:cabin:read",
-                "vehicle:powertrain:read",
-                "vehicle:diagnostics:read",
-                "aftersales:read",
-            },
-        )
+    def test_scope_policy_revision_uses_provider_default(self) -> None:
+        """Changing to NIO's full-permission default triggers reauthorization."""
+        self.assertEqual(const.OAUTH_SCOPE_REVISION, 2)
