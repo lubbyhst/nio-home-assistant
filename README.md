@@ -31,12 +31,13 @@ Current development milestone (`0.1.1-dev.1`):
   that do work.
 
 Most detailed entities are disabled by default to avoid flooding a new Home
-Assistant installation. The enabled diagnostic **API availability** sensor
-shows which endpoint families work, have no recent data, are permission-denied,
-or returned another error. Use that result to choose detailed sensors on the
-NIO device page. Once enabled, each detailed telemetry sensor reports its source
-endpoint and that endpoint's current status as attributes. The existing
-battery/range/charging entities keep their original IDs.
+Assistant installation. **Disabled does not mean broken or denied**; it is only
+the default Home Assistant entity-registry setting. The enabled diagnostic
+**API availability** sensor shows which endpoint families work, have no recent
+data, are denied by NIO, or returned another error. Once enabled, each detailed
+telemetry sensor reports its source endpoint and that endpoint's current status
+as attributes. The existing battery/range/charging entities keep their original
+IDs.
 
 ## Live API status
 
@@ -51,14 +52,36 @@ behave differently.
 | Battery SoC in latest vehicle status | Yes | Returned `0` instead of the vehicle's real SoC |
 | Charging state, battery current/voltage | Yes | Missing, null, or zero in the latest-status response |
 | SoC/range/charging-target change feed | Yes | `resource_not_found`, including after driving and an observed 2% discharge |
-| Body, lights, windows, driving, position, trips, cell/extremum, cabin, motor, alarms | Yes in dev5 | Depends on granted scopes; unavailable scopes are now marked as `permission_denied` |
-| Aftersales odometer reports | Yes in dev5 | Depends on granted scopes; unavailable without `aftersales:read` |
+| Body, lights, windows, position, trips, cells, cabin, motor, alarms | Yes | NIO currently returns `permission_denied` |
+| Driving and battery-extremum change feeds | Yes | Request accepted, but currently returns no recent record |
+| Aftersales odometer reports | Yes | NIO currently returns `permission_denied`; the working latest-status mileage is used for the normal odometer sensor |
+
+### Current live sensor diagnosis
+
+This diagnosis was observed with `v0.1.1-dev.1` on one EU ET5 Touring on
+2026-09-06. It describes this app/account/vehicle combination and may differ for
+another NIO application or vehicle.
+
+| Diagnosis | Sensors/data |
+|---|---|
+| Working and meaningful | API availability, data timestamp, odometer (`5077 km`), vehicle state (`PARKED_VEHICLE`), comfort mode |
+| Plausible but not yet verified while driving | Speed (`0` while parked) |
+| Returned, but not currently trustworthy | SoC (`0`), charging state (null), remaining range (missing), charging target (missing), operation mode (null), total voltage/current (`0`), DC-DC status (null), insulation resistance (`0`), gear (unmapped raw `0`) |
+| Endpoint works but has no recent event record | Driving mode, steering angle/speed, accelerator position, average/minimum/maximum speed, highest/lowest cell voltage, highest/lowest battery temperature, discharged energy, SoC lock limit/status, vehicle-to-load status |
+| Endpoint denied by NIO | Vehicle lock/doors, fridge, lights/windows, position/GPS, trips and trip energy, cell details, heating/HVAC, driving motors, alarms, aftersales odometer |
+
+`permission_denied` is returned by the official NIO API. It is **not** a Home
+Assistant user-rights problem. It means NIO refuses that endpoint for the
+current OAuth application/token/vehicle combination. Because authorization
+succeeds using NIO's documented default personal-app grant, the current
+evidence points to an upstream NIO entitlement or vehicle/application
+provisioning restriction. Only NIO can confirm the exact backend reason.
 
 The VIN was independently verified because vehicle state and mileage were
 correct. If a granted scope is missing, the integration keeps setup active and
-flags the affected feed as `permission_denied`, so you can continue with available
-data while granting any missing permissions. A detailed case has been sent to
-NIO and feedback is still pending. If you have faster access to NIO's Open
+flags the affected feed as `permission_denied`, so available data keeps working
+while the NIO-side restriction is investigated. A detailed case has been sent
+to NIO and feedback is still pending. If you have faster access to NIO's Open
 Telematics API support or can test another eligible EU vehicle, please open a
 GitHub issue and help move the investigation forward. Never post credentials,
 tokens, a full VIN, or precise location data.
