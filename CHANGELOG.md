@@ -15,6 +15,8 @@ Use this before releases and when opening PRs.
   contains a permission unavailable to the application.
 - Advance the permission-policy revision so existing installations receive the
   corrected native reauthentication prompt.
+- Keep OAuth error imports compatible across the integration's supported Home
+  Assistant versions.
 
 ## 0.1.0-dev9
 

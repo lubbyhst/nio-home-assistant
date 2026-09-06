@@ -9,15 +9,13 @@ from typing import Any, cast, override
 from aiohttp import BasicAuth, ClientResponseError
 from homeassistant.components.application_credentials import ClientCredential
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import (
-    OAuth2TokenRequestError,
-    OAuth2TokenRequestReauthError,
-    OAuth2TokenRequestTransientError,
-)
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.config_entry_oauth2_flow import (
     AbstractOAuth2Implementation,
     LocalOAuth2ImplementationWithPkce,
+    OAuth2TokenRequestError,
+    OAuth2TokenRequestReauthError,
+    OAuth2TokenRequestTransientError,
 )
 
 from .const import AUTHORIZE_PATH, OAUTH_BASE_URL, TOKEN_PATH
