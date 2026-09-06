@@ -25,6 +25,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from .availability import availability_attributes, overall_availability
 from .coordinator import NioDataUpdateCoordinator
 from .entity import NioEntity
 from .models import NioVehicleData
@@ -36,6 +37,7 @@ class NioSensorDescription(SensorEntityDescription):
 
     value_fn: Callable[[NioVehicleData], Any]
     attributes_fn: Callable[[NioVehicleData], dict[str, Any]] | None = None
+    source_endpoint: str | None = None
 
 
 def _field(
@@ -72,10 +74,18 @@ def _simple(
         device_class=device_class,
         entity_registry_enabled_default=enabled,
         value_fn=_field(endpoint, field, scale, offset),
+        source_endpoint=endpoint,
     )
 
 
 SENSORS: tuple[NioSensorDescription, ...] = (
+    NioSensorDescription(
+        key="api_availability",
+        name="API availability",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: overall_availability(data.endpoint_status),
+        attributes_fn=lambda data: availability_attributes(data.endpoint_status),
+    ),
     NioSensorDescription(
         key="battery_state_of_charge",
         translation_key="battery_state_of_charge",
@@ -139,7 +149,6 @@ SENSORS: tuple[NioSensorDescription, ...] = (
         "mileage",
         unit=UnitOfLength.KILOMETERS,
         device_class=SensorDeviceClass.DISTANCE,
-        scale=0.1,
         enabled=True,
     ),
     _simple(
@@ -486,6 +495,15 @@ class NioSensor(NioEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        if self.entity_description.attributes_fn is None:
-            return None
-        return self.entity_description.attributes_fn(self.coordinator.data)
+        attributes = (
+            self.entity_description.attributes_fn(self.coordinator.data)
+            if self.entity_description.attributes_fn is not None
+            else {}
+        )
+        if endpoint := self.entity_description.source_endpoint:
+            attributes = {
+                **attributes,
+                "source_endpoint": endpoint,
+                "endpoint_status": self.coordinator.data.endpoint_status.get(endpoint),
+            }
+        return attributes or None

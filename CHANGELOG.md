@@ -7,6 +7,19 @@ Use this before releases and when opening PRs.
 
 - Prepare and maintain this public changelog file for HACS users.
 
+## 0.1.1-dev.1
+
+- Add one enabled diagnostic `API availability` sensor that summarizes all
+  endpoint results as `available`, `partial`, or `unavailable`.
+- Expose grouped working, empty, permission-denied, and errored endpoint lists
+  as attributes so users can decide which detailed sensors are worth enabling.
+- Add `source_endpoint` and live `endpoint_status` attributes to detailed
+  telemetry sensors when they are enabled.
+- Move to an unambiguous SemVer prerelease format so HACS orders future
+  development releases correctly.
+- Correct odometer scaling: NIO's live `mileage` value is already expressed in
+  kilometres and must not be divided by ten.
+
 ## 0.1.0-dev10
 
 - Omit the OAuth `scope` parameter so NIO grants the application's full

@@ -15,7 +15,7 @@ supported integration, or affiliated with NIO, Home Assistant, or OpenAI.
 It is experimental software. Review it, protect your credentials and vehicle
 data, and use it at your own risk.
 
-Current development milestone (`0.1.0-dev10`):
+Current development milestone (`0.1.1-dev.1`):
 
 - polls every documented read-only telemetry category that can provide useful
   Home Assistant state: body, dynamics, location, trip, energy, cabin,
@@ -31,9 +31,12 @@ Current development milestone (`0.1.0-dev10`):
   that do work.
 
 Most detailed entities are disabled by default to avoid flooding a new Home
-Assistant installation. Enable the ones you need on the NIO device page. The
-existing battery/range/charging entities keep their original IDs; odometer is
-the only newly enabled-by-default entity.
+Assistant installation. The enabled diagnostic **API availability** sensor
+shows which endpoint families work, have no recent data, are permission-denied,
+or returned another error. Use that result to choose detailed sensors on the
+NIO device page. Once enabled, each detailed telemetry sensor reports its source
+endpoint and that endpoint's current status as attributes. The existing
+battery/range/charging entities keep their original IDs.
 
 ## Live API status
 
@@ -44,7 +47,7 @@ behave differently.
 | Data | Implemented | Observed result |
 |---|---:|---|
 | OAuth authorization, refresh and user info | Yes | Working |
-| Latest vehicle timestamp/state/mileage | Yes | Working; timestamp and mileage advanced after driving |
+| Latest vehicle timestamp/state/mileage | Yes | Working; timestamp and mileage advanced after driving; raw mileage is kilometres |
 | Battery SoC in latest vehicle status | Yes | Returned `0` instead of the vehicle's real SoC |
 | Charging state, battery current/voltage | Yes | Missing, null, or zero in the latest-status response |
 | SoC/range/charging-target change feed | Yes | `resource_not_found`, including after driving and an observed 2% discharge |
