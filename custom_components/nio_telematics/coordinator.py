@@ -78,7 +78,12 @@ class NioDataUpdateCoordinator(DataUpdateCoordinator[NioVehicleData]):
                     endpoint_status[resource] = "no_recent_data"
                     continue
                 except NioPermissionError:
-                    raise
+                    endpoint_status[resource] = "permission_denied"
+                    self._LOGGER.debug(
+                        "NIO change endpoint %s lacks granted permission; skipping",
+                        resource,
+                    )
+                    continue
                 except NioApiError as err:
                     endpoint_status[resource] = type(err).__name__
                     self._LOGGER.debug(
@@ -97,7 +102,10 @@ class NioDataUpdateCoordinator(DataUpdateCoordinator[NioVehicleData]):
             except NioResourceNotFoundError:
                 endpoint_status["odometer_report"] = "no_data"
             except NioPermissionError:
-                raise
+                endpoint_status["odometer_report"] = "permission_denied"
+                self._LOGGER.debug(
+                    "NIO odometer endpoint lacks granted permission; skipping"
+                )
             except NioApiError as err:
                 endpoint_status["odometer_report"] = type(err).__name__
         except (NioAuthenticationError, NioPermissionError) as err:

@@ -15,7 +15,7 @@ supported integration, or affiliated with NIO, Home Assistant, or OpenAI.
 It is experimental software. Review it, protect your credentials and vehicle
 data, and use it at your own risk.
 
-Current development milestone (`0.1.0-dev6`):
+Current development milestone (`0.1.0-dev7`):
 
 - polls every documented read-only telemetry category that can provide useful
   Home Assistant state: body, dynamics, location, trip, energy, cabin,
@@ -48,14 +48,14 @@ behave differently.
 | Battery SoC in latest vehicle status | Yes | Returned `0` instead of the vehicle's real SoC |
 | Charging state, battery current/voltage | Yes | Missing, null, or zero in the latest-status response |
 | SoC/range/charging-target change feed | Yes | `resource_not_found`, including after driving and an observed 2% discharge |
-| Body, lights, windows, driving, position, trips, cell/extremum, cabin, motor, alarms | Yes in dev5 | Awaiting live verification after expanded-scope authorization |
-| Aftersales odometer reports | Yes in dev5 | Awaiting live verification after expanded-scope authorization |
+| Body, lights, windows, driving, position, trips, cell/extremum, cabin, motor, alarms | Yes in dev5 | Depends on granted scopes; unavailable scopes are now marked as `permission_denied` |
+| Aftersales odometer reports | Yes in dev5 | Depends on granted scopes; unavailable without `aftersales:read` |
 
 The VIN was independently verified because vehicle state and mileage were
-correct. The same energy failures were reproduced directly in Postman with a
-fresh OAuth token and all personal-application scopes, so they are not currently
-explained by Home Assistant parsing or polling. A detailed case has been sent
-to NIO and feedback is still pending. If you have faster access to NIO's Open
+correct. If a granted scope is missing, the integration keeps setup active and
+flags the affected feed as `permission_denied`, so you can continue with available
+data while granting any missing permissions. A detailed case has been sent to
+NIO and feedback is still pending. If you have faster access to NIO's Open
 Telematics API support or can test another eligible EU vehicle, please open a
 GitHub issue and help move the investigation forward. Never post credentials,
 tokens, a full VIN, or precise location data.
@@ -68,8 +68,6 @@ vehicle-list endpoint, so setup validates a manually entered VIN after consent.
 If API scopes or permissions are changed, Home Assistant will now request a
 clean reauthorization flow automatically.
 Automated tests, hassfest, and HACS repository validation run on every push.
-Expanded endpoint testing and a tagged release must still be completed before the
-integration is ready for normal installation through HACS.
 
 Never commit a Client ID, Client Secret, VIN, access token, refresh token, or
 diagnostic payload containing personal vehicle data.

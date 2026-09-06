@@ -7,6 +7,14 @@ Use this before releases and when opening PRs.
 
 - Prepare and maintain this public changelog file for HACS users.
 
+## 0.1.0-dev7
+
+- Avoid hard-failing setup when an optional endpoint is blocked by missing OAuth
+  scope by marking that endpoint as `permission_denied` instead of converting the
+  whole integration state to `setup_error`.
+- Keep reauthentication path available when required authentication scopes are
+  missing for core endpoints.
+
 ## 0.1.0-dev6
 
 - Improve OAuth permission-handling so scope/permission changes surface as a clear
