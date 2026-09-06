@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import logging
 from typing import Any, override
 
@@ -52,14 +53,16 @@ class NioConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=D
         return await self.async_step_vehicle()
 
     async def async_step_reauth(
-        self, _user_input: dict[str, Any] | None = None
+        self, entry_data: Mapping[str, Any]
     ) -> config_entries.ConfigFlowResult:
         """Re-run OAuth flow when the existing token/scopes are no longer valid."""
         self._get_reauth_entry()
-        # Reuse the normal authorization flow and return directly to Home Assistant's
-        # OAuth callback on completion. The token update is handled in
-        # async_oauth_create_entry when source == SOURCE_REAUTH.
-        return await self.async_step_user()
+        # Reauth can start outside an HTTP request, so Home Assistant cannot
+        # auto-select the sole OAuth implementation. Select the implementation
+        # already stored on the entry explicitly before generating the redirect.
+        return await self.async_step_pick_implementation(
+            {"implementation": entry_data["auth_implementation"]}
+        )
 
     async def async_step_vehicle(
         self, user_input: dict[str, Any] | None = None

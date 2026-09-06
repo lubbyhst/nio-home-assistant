@@ -1,5 +1,7 @@
 """Config-flow tests for NIO Open Telematics."""
 
+from unittest.mock import AsyncMock, patch
+
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -48,3 +50,29 @@ async def test_oauth_records_current_scope_revision(hass: HomeAssistant) -> None
 
     assert result["type"] is FlowResultType.FORM
     assert handler._oauth_data[CONF_SCOPE_REVISION] == OAUTH_SCOPE_REVISION
+
+
+async def test_reauth_reuses_stored_oauth_implementation(
+    hass: HomeAssistant,
+) -> None:
+    """Background reauth explicitly selects the entry's OAuth implementation."""
+    handler = NioConfigFlow()
+    handler.hass = hass
+    expected_result = {"type": FlowResultType.EXTERNAL_STEP, "step_id": "auth"}
+
+    with (
+        patch.object(handler, "_get_reauth_entry"),
+        patch.object(
+            handler,
+            "async_step_pick_implementation",
+            AsyncMock(return_value=expected_result),
+        ) as pick_implementation,
+    ):
+        result = await handler.async_step_reauth(
+            {"auth_implementation": "nio-local"}
+        )
+
+    pick_implementation.assert_awaited_once_with(
+        {"implementation": "nio-local"}
+    )
+    assert result == expected_result

@@ -7,6 +7,13 @@ Use this before releases and when opening PRs.
 
 - Prepare and maintain this public changelog file for HACS users.
 
+## 0.1.0-dev9
+
+- Fix scope reauthorization started from Home Assistant Repairs by explicitly
+  selecting the OAuth implementation stored on the existing config entry.
+- Publish development builds as normal GitHub releases so HACS can expose their
+  release notes; development status remains explicit in the version and notes.
+
 ## 0.1.0-dev8
 
 - Record a revision for the requested NIO OAuth scope set.
