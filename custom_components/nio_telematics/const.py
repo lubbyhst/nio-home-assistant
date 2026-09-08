@@ -16,23 +16,10 @@ CONF_VIN: Final = "vin"
 CONF_VEHICLE_NAME: Final = "vehicle_name"
 CONF_SCOPE_REVISION: Final = "scope_revision"
 
-OAUTH_SCOPES: Final = [
-    "vehicle:read",
-    "vehicle:dynamics:read",
-    "vehicle:location:read",
-    "vehicle:energy:read",
-    "vehicle:body:read",
-    "vehicle:cabin:read",
-    "vehicle:powertrain:read",
-    "vehicle:diagnostics:read",
-    "vehicle:adas:read",
-    "vehicle:nomi:read",
-    "aftersales:read",
-]
-
-# The explicit scope set changed from the provider-default request. Existing
-# entries must reauthenticate so their token is issued with this set.
-OAUTH_SCOPE_REVISION: Final = 3
+# NIO grants the application's full permitted scope set when the OAuth
+# authorization request omits ``scope``. Do not send an explicit list: NIO
+# rejects the entire request if it contains a scope unavailable to that app.
+OAUTH_SCOPE_REVISION: Final = 2
 
 DEFAULT_SCAN_INTERVAL: Final = timedelta(minutes=10)
 ATTR_EVENT_TIME: Final = "event_time"
