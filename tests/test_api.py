@@ -7,6 +7,7 @@ import pytest
 
 from custom_components.nio_telematics.api import (
     NioApiClient,
+    NioApiError,
     NioAuthenticationError,
     NioPermissionError,
     NioRateLimitError,
@@ -162,6 +163,116 @@ async def test_generic_change_endpoint_returns_newest_record() -> None:
     assert "params" not in request.kwargs
 
 
+async def test_generic_change_endpoint_rejects_malformed_data() -> None:
+    oauth_session = MagicMock()
+    oauth_session.async_request = AsyncMock(
+        return_value=response(200, {"result_code": "success", "data": {}})
+    )
+    client = NioApiClient(oauth_session, API_BASE_URL)
+
+    with pytest.raises(NioApiError, match="invalid telemetry payload"):
+        await client.async_get_change_record("LJNABC12345678901", "door_status")
+
+
+async def test_generic_change_endpoint_maps_empty_data_to_no_recent_data() -> None:
+    oauth_session = MagicMock()
+    oauth_session.async_request = AsyncMock(
+        return_value=response(200, {"result_code": "success", "data": []})
+    )
+    client = NioApiClient(oauth_session, API_BASE_URL)
+
+    with pytest.raises(NioResourceNotFoundError):
+        await client.async_get_change_record("LJNABC12345678901", "door_status")
+
+
+@pytest.mark.parametrize(
+    "resource",
+    (
+        "door_status",
+        "fridge_status",
+        "light_status",
+        "window_status",
+        "driving_data",
+        "vehicle_status",
+        "position_status",
+        "trip_status",
+        "cell_status",
+        "extremum_data",
+        "soc_status",
+        "heating_status",
+        "hvac_status",
+        "driving_motor",
+        "alarm_signal",
+    ),
+)
+async def test_all_retained_change_endpoints_use_documented_paths(
+    resource: str,
+) -> None:
+    oauth_session = MagicMock()
+    oauth_session.async_request = AsyncMock(
+        return_value=response(
+            200,
+            {"result_code": "success", "data": [{"sample_timestamp": 1000}]},
+        )
+    )
+    client = NioApiClient(oauth_session, API_BASE_URL)
+
+    await client.async_get_change_record("LJNABC12345678901", resource)
+
+    request = oauth_session.async_request.await_args
+    assert request.args[1].endswith(
+        f"/vehicles/LJNABC12345678901/{resource}/changes"
+    )
+
+
+async def test_odometer_reports_use_documented_path() -> None:
+    oauth_session = MagicMock()
+    oauth_session.async_request = AsyncMock(
+        return_value=response(
+            200,
+            {
+                "result_code": "success",
+                "data": [{"value": 123, "recorded_at": "2026-09-17"}],
+            },
+        )
+    )
+    client = NioApiClient(oauth_session, API_BASE_URL)
+
+    report = await client.async_get_odometer_report("LJNABC12345678901")
+
+    assert report["value"] == 123
+    request = oauth_session.async_request.await_args
+    assert request.args[1].endswith(
+        "/aftersales/vehicles/LJNABC12345678901/odometer_reports"
+    )
+
+
+async def test_vehicle_status_changes_uses_change_endpoint() -> None:
+    oauth_session = MagicMock()
+    oauth_session.async_request = AsyncMock(
+        return_value=response(
+            200,
+            {
+                "result_code": "success",
+                "data": [
+                    {"vehl_state": "PARKED_VEHICLE", "sample_timestamp": 2000}
+                ],
+            },
+        )
+    )
+    client = NioApiClient(oauth_session, API_BASE_URL)
+
+    record = await client.async_get_change_record(
+        "LJNABC12345678901", "vehicle_status"
+    )
+
+    assert record["vehl_state"] == "PARKED_VEHICLE"
+    request = oauth_session.async_request.await_args
+    assert request.args[1].endswith(
+        "/vehicles/LJNABC12345678901/vehicle_status/changes"
+    )
+
+
 async def test_debug_trace_is_complete_but_redacts_sensitive_data(caplog) -> None:
     oauth_session = MagicMock()
     oauth_session.async_request = AsyncMock(
@@ -231,5 +342,7 @@ async def test_http_errors_are_mapped(status, headers, error) -> None:
     oauth_session = MagicMock()
     oauth_session.async_request = AsyncMock(return_value=response(status, {}, headers))
     client = NioApiClient(oauth_session, API_BASE_URL)
-    with pytest.raises(error):
+    with pytest.raises(error) as raised:
         await client.async_get_soc_status("LJNABC12345678901")
+    if error is NioRateLimitError:
+        assert raised.value.retry_after == 30

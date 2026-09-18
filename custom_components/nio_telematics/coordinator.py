@@ -17,7 +17,13 @@ from .api import (
     NioPermissionError,
     NioResourceNotFoundError,
 )
-from .const import CONF_VIN, DEFAULT_SCAN_INTERVAL, DOMAIN
+from .const import (
+    CHANGE_ENDPOINT_RESOURCES,
+    CHANGE_ENDPOINTS,
+    CONF_VIN,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+)
 from .models import NioSocStatus, NioVehicleData
 
 
@@ -43,22 +49,7 @@ class NioDataUpdateCoordinator(DataUpdateCoordinator[NioVehicleData]):
         self._vin = entry.data[CONF_VIN]
         self._telemetry: dict[str, dict] = {}
 
-    _CHANGE_ENDPOINTS = (
-        "door_status",
-        "fridge_status",
-        "light_status",
-        "window_status",
-        "driving_data",
-        "position_status",
-        "trip_status",
-        "cell_status",
-        "extremum_data",
-        "soc_status",
-        "heating_status",
-        "hvac_status",
-        "driving_motor",
-        "alarm_signal",
-    )
+    _CHANGE_ENDPOINTS = CHANGE_ENDPOINTS
 
     async def _async_update_data(self) -> NioVehicleData:
         try:
@@ -69,30 +60,31 @@ class NioDataUpdateCoordinator(DataUpdateCoordinator[NioVehicleData]):
             self._telemetry["vehicle_status"] = latest_record
             endpoint_status = {"vehicle_status": "success"}
             energy_status = None
-            for resource in self._CHANGE_ENDPOINTS:
+            for endpoint in self._CHANGE_ENDPOINTS:
+                resource = CHANGE_ENDPOINT_RESOURCES.get(endpoint, endpoint)
                 try:
                     record = await self._client.async_get_change_record(
                         self._vin, resource
                     )
                 except NioResourceNotFoundError:
-                    endpoint_status[resource] = "no_recent_data"
+                    endpoint_status[endpoint] = "no_recent_data"
                     continue
                 except NioPermissionError:
-                    endpoint_status[resource] = "permission_denied"
+                    endpoint_status[endpoint] = "permission_denied"
                     self._LOGGER.debug(
                         "NIO change endpoint %s lacks granted permission; skipping",
-                        resource,
+                        endpoint,
                     )
                     continue
                 except NioApiError as err:
-                    endpoint_status[resource] = type(err).__name__
+                    endpoint_status[endpoint] = type(err).__name__
                     self._LOGGER.debug(
                         "Optional NIO endpoint %s unavailable: %s", resource, err
                     )
                     continue
-                self._telemetry[resource] = record
-                endpoint_status[resource] = "success"
-                if resource == "soc_status":
+                self._telemetry[endpoint] = record
+                endpoint_status[endpoint] = "success"
+                if endpoint == "soc_status":
                     energy_status = NioSocStatus.from_payload(record)
             try:
                 self._telemetry[

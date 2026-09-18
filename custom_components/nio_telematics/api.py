@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 import time
 from typing import Any
 
@@ -12,24 +11,11 @@ from homeassistant.helpers.config_entry_oauth2_flow import OAuth2Session
 
 from .const import TELEMATICS_PATH
 from .models import NioSocStatus
+from .privacy import redact_debug_value as _redact_debug_value
+from .privacy import safe_endpoint as _safe_endpoint
 
 _LOGGER = logging.getLogger(__name__)
 
-_SENSITIVE_KEY_PARTS = (
-    "access_token",
-    "authorization",
-    "client_id",
-    "client_secret",
-    "code_verifier",
-    "latitude",
-    "longitude",
-    "refresh_token",
-    "token",
-    "vin",
-)
-_VIN_IN_TEXT = re.compile(
-    r"(?<![A-Z0-9])[A-HJ-NPR-Z0-9]{17}(?![A-Z0-9])", re.IGNORECASE
-)
 _SAFE_RESPONSE_HEADERS = {
     "content-type",
     "retry-after",
@@ -46,30 +32,6 @@ _SOC_WINDOW_CANDIDATES_SECONDS = (
     30 * 60,
     10 * 60,
 )
-
-
-def _redact_debug_value(value: Any, *, key: str = "") -> Any:
-    """Recursively redact credentials, vehicle IDs, and precise location data."""
-    normalized_key = key.casefold()
-    if any(part in normalized_key for part in _SENSITIVE_KEY_PARTS):
-        return "**REDACTED**"
-    if isinstance(value, dict):
-        return {
-            str(item_key): _redact_debug_value(item_value, key=str(item_key))
-            for item_key, item_value in value.items()
-        }
-    if isinstance(value, list):
-        return [_redact_debug_value(item) for item in value]
-    if isinstance(value, tuple):
-        return tuple(_redact_debug_value(item) for item in value)
-    if isinstance(value, str):
-        return _VIN_IN_TEXT.sub("**REDACTED_VIN**", value)
-    return value
-
-
-def _safe_endpoint(path: str) -> str:
-    """Return an endpoint path with any VIN removed."""
-    return _VIN_IN_TEXT.sub("{vin}", path)
 
 
 class NioApiError(Exception):
@@ -176,7 +138,9 @@ class NioApiClient:
             f"{TELEMATICS_PATH}/vehicles/{vin}/{resource}/changes"
         )
         data = payload.get("data")
-        if not isinstance(data, list) or not data:
+        if not isinstance(data, list):
+            raise NioApiError("NIO returned an invalid telemetry payload")
+        if not data:
             raise NioResourceNotFoundError("NIO returned no telemetry records")
         records = [item for item in data if isinstance(item, dict)]
         if not records:

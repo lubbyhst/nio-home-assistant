@@ -18,9 +18,12 @@ data, and use it at your own risk.
 Current development milestone (`0.1.1-dev.1`):
 
 - polls every documented read-only telemetry category that can provide useful
-  Home Assistant state: body, dynamics, location, trip, energy, cabin,
-  powertrain, diagnostics, and aftersales odometer data;
-- creates 64 stable scalar sensors and 16 disabled diagnostic endpoint sensors;
+  Home Assistant state across the 17 retained telemetry endpoints: body,
+  dynamics, location, trip, energy, cabin, powertrain, diagnostics, and
+  aftersales odometer data;
+- intentionally excludes NIO's ADAS file/scan APIs, NOMI ASR file listing, and
+  recall campaign/history APIs;
+- creates 64 stable scalar sensors and 17 disabled diagnostic endpoint sensors;
 - preserves variable-length/nested data such as battery cells, motor lists,
   window faults, door structures, and alarm signals as attributes on the
   corresponding disabled diagnostic sensor;
@@ -98,6 +101,9 @@ records the permission revision after it completes. Individual optional feeds
 that NIO still denies remain isolated as
 `permission_denied` rather than taking the integration offline.
 Automated tests, hassfest, and HACS repository validation run on every push.
+
+The retained endpoint inventory and the intentionally excluded public API
+families are documented in [docs/nio-open-platform-api.md](docs/nio-open-platform-api.md).
 
 Never commit a Client ID, Client Secret, VIN, access token, refresh token, or
 diagnostic payload containing personal vehicle data.

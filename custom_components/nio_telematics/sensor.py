@@ -23,12 +23,14 @@ from homeassistant.const import (
     UnitOfTemperature,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .availability import availability_attributes, overall_availability
+from .const import SUPPORTED_ENDPOINTS
 from .coordinator import NioDataUpdateCoordinator
 from .entity import NioEntity
 from .models import NioVehicleData
+from .privacy import safe_diagnostic_attributes
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -441,28 +443,11 @@ SENSORS: tuple[NioSensorDescription, ...] = (
             entity_category=EntityCategory.DIAGNOSTIC,
             entity_registry_enabled_default=False,
             value_fn=lambda data, endpoint=endpoint: data.endpoint_status.get(endpoint),
-            attributes_fn=lambda data, endpoint=endpoint: data.telemetry.get(
-                endpoint, {}
+            attributes_fn=lambda data, endpoint=endpoint: safe_diagnostic_attributes(
+                data.telemetry.get(endpoint, {})
             ),
         )
-        for endpoint in (
-            "vehicle_status",
-            "door_status",
-            "fridge_status",
-            "light_status",
-            "window_status",
-            "driving_data",
-            "position_status",
-            "trip_status",
-            "cell_status",
-            "extremum_data",
-            "soc_status",
-            "heating_status",
-            "hvac_status",
-            "driving_motor",
-            "alarm_signal",
-            "odometer_report",
-        )
+        for endpoint in SUPPORTED_ENDPOINTS
     ),
 )
 
@@ -470,7 +455,7 @@ SENSORS: tuple[NioSensorDescription, ...] = (
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    async_add_entities: AddConfigEntryEntitiesCallback,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: NioDataUpdateCoordinator = entry.runtime_data
     async_add_entities(NioSensor(coordinator, description) for description in SENSORS)
