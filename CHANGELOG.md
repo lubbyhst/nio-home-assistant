@@ -6,6 +6,11 @@ Use this before releases and when opening PRs.
 ## Unreleased
 
 - Prepare and maintain this public changelog file for HACS users.
+- Add vehicle-status change-feed coverage and a centralized inventory for all
+  17 retained telemetry endpoints.
+- Bound and redact detailed endpoint attributes before exposing them in Home
+  Assistant state.
+- Document the intentionally excluded ADAS, NOMI ASR, and recall APIs.
 
 ## 0.1.1-dev.1
 

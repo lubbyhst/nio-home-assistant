@@ -10,11 +10,18 @@ from homeassistant.core import HomeAssistant
 
 TO_REDACT = {
     "access_token",
+    "latitude",
+    "longitude",
+    "lat",
+    "lon",
+    "lng",
     "vin",
+    "vehicle_uuid",
     "refresh_token",
     "client_id",
     "client_secret",
     "token",
+    "url",
 }
 
 
