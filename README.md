@@ -41,7 +41,7 @@ data, and use it at your own risk.
 > report is a curiosity; a fleet of matching reports is evidence. EU NIO
 > owners, rally—we are legion, and we need you. 😄
 
-Current development milestone (`0.1.1-dev.3`):
+Current development release (`0.1.1-dev.4`):
 
 - polls every documented read-only telemetry category that can provide useful
   Home Assistant state: body, dynamics, location, trip, energy, cabin,
@@ -55,6 +55,11 @@ Current development milestone (`0.1.1-dev.3`):
 - handles authentication, permission, rate-limit, envelope, and transport
   errors separately, and keeps unavailable optional feeds from breaking feeds
   that do work.
+
+`0.1.1-dev.4` also fixes NIO's HTTP-success `invalid_grant` refresh response:
+Home Assistant now opens its native reauthentication repair for rejected
+authorization, while temporary token-service failures remain retryable. This
+does not change NIO's upstream SoC or endpoint-permission behavior.
 
 Most detailed entities are disabled by default to avoid flooding a new Home
 Assistant installation. **Disabled does not mean broken or denied**; it is only
@@ -73,7 +78,7 @@ behave differently.
 
 | Data | Implemented | Observed result |
 |---|---:|---|
-| OAuth authorization, refresh and user info | Yes | Working |
+| OAuth authorization, refresh and user info | Yes | Working after restart; a rejected refresh grant now triggers native HA reauthentication (cause of NIO's rejection unknown) |
 | Latest vehicle timestamp/state/mileage | Yes | Working; timestamp and mileage advanced after driving; raw mileage is kilometres |
 | Battery SoC in latest vehicle status | Yes | Returned `0` instead of the vehicle's real SoC |
 | Charging state, battery current/voltage | Yes | Missing, null, or zero in the latest-status response |
