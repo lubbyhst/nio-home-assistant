@@ -3,6 +3,15 @@
 The changelog is the authoritative release history for this integration.
 Use this before releases and when opening PRs.
 
+## 0.1.1-dev.4
+
+- Treat NIO's HTTP-success `invalid_grant` token response as a rejected OAuth
+  authorization so Home Assistant starts its native reauthentication flow.
+- Keep temporary token-service and network failures retryable instead of
+  prompting for authorization.
+- Prevent OAuth exceptions from exposing request credentials or provider
+  response text, and add regression tests for wrapped error responses.
+
 ## 0.1.1-dev.3
 
 - Credit the project's first external tester and contributor, `@lubbyhst`.

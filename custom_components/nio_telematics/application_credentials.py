@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 from http import HTTPStatus
-from typing import Any, cast, override
+from typing import Any, override
 
-from aiohttp import BasicAuth, ClientResponseError
+from aiohttp import BasicAuth, ClientError, RequestInfo
 from homeassistant.components.application_credentials import ClientCredential
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -17,15 +16,37 @@ from homeassistant.helpers.config_entry_oauth2_flow import (
     OAuth2TokenRequestReauthError,
     OAuth2TokenRequestTransientError,
 )
+from multidict import CIMultiDict, CIMultiDictProxy
+from yarl import URL
 
 from .const import AUTHORIZE_PATH, OAUTH_BASE_URL, TOKEN_PATH
-from .oauth import unwrap_token_response
-
-_LOGGER = logging.getLogger(__name__)
+from .oauth import (
+    REAUTH_RESULT_CODES,
+    TRANSIENT_RESULT_CODES,
+    InvalidTokenResponseError,
+    unwrap_token_response,
+)
 
 
 class NioOAuth2Implementation(LocalOAuth2ImplementationWithPkce):
     """Handle NIO's PKCE, Basic authentication, and wrapped token envelope."""
+
+    def _safe_token_error(
+        self,
+        error_type: type[OAuth2TokenRequestError],
+        *,
+        status: int,
+        message: str,
+    ) -> OAuth2TokenRequestError:
+        """Build a HA OAuth error without request credentials or response text."""
+        return error_type(
+            request_info=RequestInfo(
+                URL(self.token_url), "POST", CIMultiDictProxy(CIMultiDict())
+            ),
+            status=status,
+            message=message,
+            domain=self.domain,
+        )
 
     @override
     async def _async_refresh_token(self, token: dict[str, Any]) -> dict[str, Any]:
@@ -50,45 +71,61 @@ class NioOAuth2Implementation(LocalOAuth2ImplementationWithPkce):
                 auth=BasicAuth(self.client_id, self.client_secret),
                 headers={"Accept": "application/json"},
             )
-            if response.status >= HTTPStatus.BAD_REQUEST:
-                try:
-                    error_payload = await response.json(content_type=None)
-                except (ValueError, TypeError):
-                    error_payload = {}
-                _LOGGER.error(
-                    "NIO token request failed: HTTP %s, result_code=%s, request_id=%s",
-                    response.status,
-                    error_payload.get("result_code", error_payload.get("error")),
-                    error_payload.get("request_id"),
-                )
-            response.raise_for_status()
+        except (ClientError, TimeoutError):
+            raise self._safe_token_error(
+                OAuth2TokenRequestTransientError,
+                status=0,
+                message="NIO OAuth token service is temporarily unreachable",
+            ) from None
+
+        try:
             payload = await response.json(content_type=None)
-        except ClientResponseError as err:
-            exception_type: type[OAuth2TokenRequestError]
-            if err.status == HTTPStatus.TOO_MANY_REQUESTS or 500 <= err.status <= 599:
-                exception_type = OAuth2TokenRequestTransientError
-            elif 400 <= err.status <= 499:
-                exception_type = OAuth2TokenRequestReauthError
-            else:
-                exception_type = OAuth2TokenRequestError
-            raise exception_type(
-                request_info=err.request_info,
-                history=err.history,
-                status=err.status,
-                message=err.message,
-                headers=err.headers,
-                domain=self.domain,
-            ) from err
-        except (ValueError, TypeError) as err:
-            raise OAuth2TokenRequestError(
-                request_info=response.request_info,
-                history=response.history,
+        except (ClientError, TimeoutError):
+            raise self._safe_token_error(
+                OAuth2TokenRequestTransientError,
+                status=response.status,
+                message="NIO OAuth token response could not be read",
+            ) from None
+        except (ValueError, TypeError):
+            payload = None
+
+        try:
+            token = unwrap_token_response(payload)
+        except InvalidTokenResponseError as err:
+            result_code = err.result_code
+            token = None
+        else:
+            result_code = None
+
+        if result_code in REAUTH_RESULT_CODES:
+            raise self._safe_token_error(
+                OAuth2TokenRequestReauthError,
+                status=response.status,
+                message=f"NIO rejected the OAuth authorization ({result_code})",
+            )
+        if (
+            result_code in TRANSIENT_RESULT_CODES
+            or response.status == HTTPStatus.TOO_MANY_REQUESTS
+            or 500 <= response.status <= 599
+        ):
+            raise self._safe_token_error(
+                OAuth2TokenRequestTransientError,
+                status=response.status,
+                message="NIO OAuth token service is temporarily unavailable",
+            )
+        if 400 <= response.status <= 499:
+            raise self._safe_token_error(
+                OAuth2TokenRequestReauthError,
+                status=response.status,
+                message="NIO rejected the OAuth token request",
+            )
+        if token is None:
+            raise self._safe_token_error(
+                OAuth2TokenRequestError,
                 status=response.status,
                 message="Invalid NIO OAuth token response",
-                headers=response.headers,
-                domain=self.domain,
-            ) from err
-        return unwrap_token_response(cast(dict[str, Any], payload))
+            )
+        return token
 
 
 async def async_get_auth_implementation(

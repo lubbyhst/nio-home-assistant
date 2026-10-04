@@ -8,7 +8,12 @@ import time
 from typing import Any
 
 from aiohttp import ClientError, ClientResponse
-from homeassistant.helpers.config_entry_oauth2_flow import OAuth2Session
+from homeassistant.helpers.config_entry_oauth2_flow import (
+    OAuth2Session,
+    OAuth2TokenRequestError,
+    OAuth2TokenRequestReauthError,
+    OAuth2TokenRequestTransientError,
+)
 
 from .const import TELEMATICS_PATH
 from .models import NioSocStatus
@@ -224,6 +229,13 @@ class NioApiClient:
                 f"{self._base_url}{path}",
                 **request_kwargs,
             )
+        except OAuth2TokenRequestReauthError:
+            # HA's OAuth2Session starts the native reauth flow for this error.
+            raise
+        except OAuth2TokenRequestTransientError as err:
+            raise NioApiError("NIO OAuth token service is temporarily unavailable") from err
+        except OAuth2TokenRequestError as err:
+            raise NioApiError("NIO OAuth token request failed") from err
         except ClientError as err:
             _LOGGER.debug(
                 "NIO API trace: endpoint=%s stage=transport error_type=%s",
