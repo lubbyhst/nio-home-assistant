@@ -21,7 +21,7 @@ CONF_SCOPE_REVISION: Final = "scope_revision"
 # rejects the entire request if it contains a scope unavailable to that app.
 OAUTH_SCOPE_REVISION: Final = 2
 
-DEFAULT_SCAN_INTERVAL: Final = timedelta(minutes=10)
+DEFAULT_SCAN_INTERVAL: Final = timedelta(minutes=5)
 ATTR_EVENT_TIME: Final = "event_time"
 
 CHANGE_ENDPOINTS: Final[tuple[str, ...]] = (

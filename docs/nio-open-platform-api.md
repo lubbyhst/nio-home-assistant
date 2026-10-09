@@ -24,7 +24,7 @@ hostnames are separate by design.
 ## Vehicle and aftersales operation catalog
 
 The live vehicle specification lists 24 operations. The integration polls the
-latest snapshot, 15 change feeds, and odometer reports every ten minutes. The
+latest snapshot, 15 change feeds, and odometer reports every five minutes. The
 response-only `nio_telematics.query` service exposes parameterized vehicle
 status history and the seven non-polled ADAS, NOMI, and recall operations.
 
@@ -56,8 +56,12 @@ status history and the seven non-polled ADAS, NOMI, and recall operations.
 | `getRecallCampaigns` | `GET /aftersales/recall_campaigns/{campaign_no}` | Service: `recall_campaign` |
 
 All paths above are relative to `/api/1/telematics`. Change-feed `start_time`
-and `end_time` are optional Unix seconds. The portal's quick-start example
-uses seconds. ADAS scan filters are `startTs` and `endTs` (nanoseconds since
+and `end_time` are optional Unix milliseconds in the live API tested on
+2026-10-09. The portal's quick-start example uses seconds, but those requests
+returned HTTP 400 `invalid_param`; otherwise identical millisecond requests
+succeeded. SoC polling uses an overlapping ten-minute window, with a
+five-minute fallback if the longer window is rejected. ADAS scan filters
+are `startTs` and `endTs` (nanoseconds since
 epoch), plus optional `limit` and `offset`. The NOMI listing uses `limit` and
 `offset`. Extraction and download require the `uuid` query parameter; `asUrl`
 is optional. Recall campaign details accept an optional `Accept-Language`
@@ -78,11 +82,12 @@ scalar sensors.
 | `sample_timestamp` | Milliseconds since epoch; convert to a UTC timestamp. |
 | `server_time` | Unix seconds. |
 | `vehicle_status.speed` | Value × 0.1 km/h. |
-| `vehicle_status.mileage` | Value × 0.1 km. |
+| `vehicle_status.mileage` | Kilometres directly in the live JSON response. Confirmed against the car's odometer; do not apply the protocol-level × 0.1 conversion. |
 | `vehicle_status.vehl_totl_volt` | Value × 0.1 V. |
 | `vehicle_status.vehl_totl_curnt` | Value × 0.1 − 1000 A. |
-| `soc_status.remaining_range` | Value represents range × 10; divide by 10 for km. `0xFFFFFFFE` and `0xFFFFFFFF` are invalid/malfunction sentinels. |
-| `extremum_data.sin_btry_hist_volt`, `sin_btry_lwst_volt` | Value × 0.001 V. |
+| `soc_status.remaining_range` | Kilometres directly in the live JSON response, confirmed against the NIO app. `0xFFFFFFFE` and `0xFFFFFFFF` are invalid/malfunction sentinels. |
+| `extremum_data.sin_btry_hist_volt`, `sin_btry_lwst_volt` | Volts directly in the live JSON response. Do not apply the protocol-level × 0.001 conversion again. |
+| `soc_status.btry_paks[].btry_pak_voltage` | Volts directly in the live JSON response. The enabled pack-voltage sensor uses a single pack; multi-pack topology is not inferred. |
 | `extremum_data.highest_temp`, `lowest_temp` | Value − 40 °C. |
 | `odometer_reports[].value` | Kilometres directly; `recorded_at` is ISO 8601. |
 
@@ -96,7 +101,7 @@ Call `nio_telematics.query` with a NIO config entry and one operation key from
 the service selector. Supply only that operation's parameters. The service
 returns the NIO envelope immediately without changing the coordinator's
 periodic polling schedule.
-`start_time` and `end_time` use seconds; `start_ts` and `end_ts` use
+`start_time` and `end_time` use milliseconds; `start_ts` and `end_ts` use
 nanoseconds. API response URLs, VINs, vehicle UUIDs, access tokens, and precise
 coordinates are redacted before returning service responses or writing entity
 attributes/debug logs. Data UUIDs remain in service responses because NIO
@@ -107,6 +112,27 @@ pre-signed object URLs; treat them as credentials.
 Diagnostic attributes are limited to 50 list items, nesting depth 8, and
 12,000 encoded bytes. Oversized diagnostic payloads are represented as
 truncated rather than persisted in Home Assistant state.
+
+## Activity and energy-data priority
+
+Fresh change records appeared immediately after charging began in the tested
+ET7. Before that, several feeds returned HTTP 404 `resource_not_found`, while
+latest status and position still returned older samples. An empty feed means
+no new measurement, not an integration failure. HTTP 400/404 business errors
+are interpreted from the envelope without overriding authentication,
+rate-limit, or server errors.
+
+The dedicated `soc_status/changes` feed provides authoritative SoC; the latest
+vehicle snapshot continued returning zero even while the energy feed had
+correct nonzero readings. Sparse energy records are merged by newest valid
+field. The coordinator retains its last-known energy values during empty
+polls, preserving the energy sample timestamp instead of replacing it with a
+new vehicle snapshot timestamp. This cache lasts for the running coordinator;
+after a Home Assistant restart, fresh energy data is needed again.
+
+These live findings concern the tested application and vehicle. The schema's
+protocol conversion descriptions are not reliable evidence of JSON units.
+Other scalar conversions remain unchanged unless independently verified.
 
 The portal's generated specification does not document every backend
 entitlement or every possible `result_code`. Access and returned telemetry can

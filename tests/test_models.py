@@ -9,11 +9,16 @@ models = load_module("models")
 
 
 class TestNioModels(unittest.TestCase):
+    def test_live_remaining_range_is_already_in_kilometers(self) -> None:
+        status = models.NioSocStatus.from_payload({"remaining_range": 200.5})
+
+        self.assertEqual(status.remaining_range, 200.5)
+
     def test_soc_status_parses_verified_fields(self) -> None:
         status = models.NioSocStatus.from_payload(
             {
                 "soc": 51,
-                "remaining_range": 2045,
+                "remaining_range": 204.5,
                 "chrg_state": "charging",
                 "chrg_final_soc": 80,
                 "max_soc": 90,
@@ -40,8 +45,10 @@ class TestNioModels(unittest.TestCase):
         self.assertIsNone(status.charging_state)
         self.assertIsNone(status.event_time)
 
-    def test_remaining_range_uses_tenths_and_omits_invalid_sentinels(self) -> None:
-        status = models.NioSocStatus.from_payload({"remaining_range": 2045})
+    def test_remaining_range_preserves_kilometers_and_omits_invalid_sentinels(
+        self,
+    ) -> None:
+        status = models.NioSocStatus.from_payload({"remaining_range": 204.5})
         invalid_status = models.NioSocStatus.from_payload(
             {"remaining_range": 0xFFFFFFFE}
         )
@@ -68,7 +75,7 @@ class TestNioModels(unittest.TestCase):
         )
         older = models.NioSocStatus.from_payload(
             {
-                "remaining_range": 2045,
+                "remaining_range": 204.5,
                 "chrg_final_soc": 80,
                 "sample_timestamp": 1_760_000_000_000,
             }

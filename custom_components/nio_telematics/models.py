@@ -114,8 +114,8 @@ class NioVehicleData:
 
 
 def _remaining_range(value: Any) -> float | None:
-    """Convert NIO's 0.1 km range value and omit invalid protocol sentinels."""
+    """The live JSON API returns kilometers; omit invalid protocol sentinels."""
     number = _optional_float(value)
     if number is None or number in _INVALID_REMAINING_RANGE_VALUES:
         return None
-    return number / 10
+    return number

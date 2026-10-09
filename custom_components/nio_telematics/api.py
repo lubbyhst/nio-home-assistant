@@ -30,13 +30,18 @@ _SAFE_RESPONSE_HEADERS = {
     "x-ratelimit-reset",
 }
 _SOC_WINDOW_CANDIDATES_SECONDS = (
-    12 * 60 * 60,
-    6 * 60 * 60,
-    3 * 60 * 60,
-    60 * 60,
-    30 * 60,
     10 * 60,
+    5 * 60,
 )
+_SOC_FIELD_ATTRIBUTES = {
+    "soc": "soc",
+    "remaining_range": "remaining_range",
+    "chrg_state": "charging_state",
+    "chrg_final_soc": "charging_target",
+    "max_soc": "maximum_soc",
+    "hivolt_btry_curnt": "high_voltage_battery_current",
+    "sample_timestamp": "event_time",
+}
 ON_DEMAND_OPERATION_IDS = {
     "vehicle_status_history": "getVehicleStatusChanges",
     "adas_snapshots": "getDlbSnapshot",
@@ -94,8 +99,13 @@ class NioApiClient:
         self,
         vin: str,
     ) -> NioSocStatus:
-        """Return the newest SoC change from NIO's largest accepted window."""
-        end_seconds = int(time.time())
+        """Return energy fields merged from newest to oldest change records."""
+        data = await self.async_get_change_record(vin, "soc_status")
+        return NioSocStatus.from_payload(data)
+
+    async def _async_get_soc_payload(self, vin: str) -> dict[str, Any]:
+        """Use the short millisecond window accepted by the live energy API."""
+        end_milliseconds = int(time.time()) * 1000
         path = f"{TELEMATICS_PATH}/vehicles/{vin}/soc_status/changes"
         windows = (
             (self._soc_window_seconds,)
@@ -108,8 +118,8 @@ class NioApiClient:
                 payload = await self._async_get(
                     path,
                     params={
-                        "start_time": end_seconds - window_seconds,
-                        "end_time": end_seconds,
+                        "start_time": end_milliseconds - window_seconds * 1000,
+                        "end_time": end_milliseconds,
                     },
                 )
             except NioInvalidParameterError as err:
@@ -124,32 +134,16 @@ class NioApiClient:
             if last_error is not None:
                 raise last_error
             raise NioApiError("NIO did not accept a SoC query window")
-        data = payload.get("data")
-        if not isinstance(data, list) or not data:
-            raise NioApiError("NIO returned no SoC status records")
-        records = [item for item in data if isinstance(item, dict)]
-        if not records:
-            raise NioApiError("NIO returned an invalid SoC status payload")
-        _LOGGER.debug(
-            "NIO SoC change response shape: record_count=%d field_sets=%s",
-            len(records),
-            [sorted(item) for item in records[:10]],
-        )
-        statuses = [
-            NioSocStatus.from_payload(item)
-            for item in sorted(
-                records,
-                key=lambda item: item.get("sample_timestamp", 0),
-                reverse=True,
-            )
-        ]
-        return NioSocStatus.merge(*statuses)
+        return payload
 
     async def async_get_change_record(self, vin: str, resource: str) -> dict[str, Any]:
         """Return the newest record from a documented change endpoint."""
-        payload = await self._async_get(
-            f"{TELEMATICS_PATH}/vehicles/{vin}/{resource}/changes"
-        )
+        if resource == "soc_status":
+            payload = await self._async_get_soc_payload(vin)
+        else:
+            payload = await self._async_get(
+                f"{TELEMATICS_PATH}/vehicles/{vin}/{resource}/changes"
+            )
         data = payload.get("data")
         if not isinstance(data, list):
             raise NioApiError("NIO returned an invalid telemetry payload")
@@ -158,6 +152,22 @@ class NioApiClient:
         records = [item for item in data if isinstance(item, dict)]
         if not records:
             raise NioApiError("NIO returned an invalid telemetry payload")
+        if resource == "soc_status":
+            # Changes can contain only some fields. Keep the newest non-null
+            # value for each field, including a legitimate zero SoC.
+            merged: dict[str, Any] = {}
+            for record in sorted(
+                records, key=lambda item: item.get("sample_timestamp") or 0
+            ):
+                values = {
+                    key: value for key, value in record.items() if value is not None
+                }
+                parsed = NioSocStatus.from_payload(record)
+                for field, attribute in _SOC_FIELD_ATTRIBUTES.items():
+                    if getattr(parsed, attribute) is None:
+                        values.pop(field, None)
+                merged.update(values)
+            return merged
         return max(records, key=lambda item: item.get("sample_timestamp", 0))
 
     async def async_get_latest_vehicle_record(self, vin: str) -> dict[str, Any]:
@@ -339,10 +349,16 @@ class NioApiClient:
             type(json_error).__name__ if json_error else None,
         )
 
-        await self._raise_for_status(response)
+        # Authentication, throttling, and server failures take precedence.
+        # NIO also sends typed business errors with HTTP 400/404, so inspect
+        # those envelopes before falling back to the generic HTTP error.
+        if response.status not in {400, 404}:
+            await self._raise_for_status(response)
         if json_error is not None:
+            await self._raise_for_status(response)
             raise NioApiError("NIO returned a non-JSON response") from json_error
         if not isinstance(payload, dict):
+            await self._raise_for_status(response)
             raise NioApiError("NIO returned an invalid response envelope")
         result_code = payload.get("result_code")
         if result_code in {"access_denied", "permission_denied", "forbidden"}:
@@ -351,6 +367,7 @@ class NioApiClient:
             raise NioResourceNotFoundError("NIO resource was not found")
         if result_code == "invalid_param":
             raise NioInvalidParameterError("NIO rejected request parameters")
+        await self._raise_for_status(response)
         if result_code != "success":
             raise NioApiError(
                 f"NIO request failed: {payload.get('result_code', 'unknown')}"

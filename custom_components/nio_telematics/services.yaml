@@ -26,14 +26,14 @@ query:
             - recall_campaign
     start_time:
       name: Start time
-      description: Unix timestamp in seconds for vehicle status history.
+      description: Unix timestamp in milliseconds for vehicle status history.
       selector:
         number:
           min: 0
           mode: box
     end_time:
       name: End time
-      description: Unix timestamp in seconds for vehicle status history.
+      description: Unix timestamp in milliseconds for vehicle status history.
       selector:
         number:
           min: 0

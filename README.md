@@ -50,7 +50,7 @@ Current development release (`0.1.1-dev.4`):
 - exposes all 24 vehicle/aftersales API operations, with the ADAS, NOMI ASR,
   and recall operations available through the response-only
   `nio_telematics.query` service;
-- creates 64 stable scalar sensors and 17 disabled diagnostic endpoint sensors;
+- creates 65 stable scalar sensors and 17 disabled diagnostic endpoint sensors;
 - preserves variable-length/nested data such as battery cells, motor lists,
   window faults, door structures, and alarm signals as attributes on the
   corresponding disabled diagnostic sensor;
@@ -76,13 +76,26 @@ IDs.
 
 ## Live API status
 
+Authenticated ET7 testing on 2026-10-09 reproduced working SoC and range
+changes as soon as charging started. The integration now prefers this energy
+feed to the latest vehicle snapshot, which still reported zero SoC. It polls
+every five minutes with a ten-minute SoC window and retains last-known energy
+values and their sample time when the car supplies no new records. HTTP 404
+`resource_not_found` is reported as `no_recent_data`, not a generic API error.
+Range and odometer are already in kilometres, and cell voltages are already
+in volts in the tested JSON responses. Applying the schema's protocol scales
+again produced incorrect values. See the [current API reference](docs/nio-open-platform-api.md)
+for the verified behavior and remaining limitations.
+
+The enabled **Battery pack voltage** sensor shows the complete pack's voltage
+from the energy feed. **Highest/lowest cell voltage** describe individual
+cells and use three decimal places; approximately 4 V per cell is compatible
+with a pack voltage of several hundred volts. Multi-pack layouts are left
+unknown because their electrical topology cannot be inferred from the array.
+
 The table below records hands-on testing against one EU NIO ET5 Touring on
-2026-09-06, before the portal schema refresh checked on 2026-10-09. Other
-vehicle models or accounts may behave differently. The current portal documents
-raw vehicle mileage in 0.1 km increments and range in 0.1 km units; those
-conversions now follow the current contract and need a fresh authenticated
-vehicle comparison before the historical values below should be treated as
-current.
+2026-09-06. It is historical evidence; other vehicle models and accounts may
+behave differently, and the newer ET7 results above supersede it for that car.
 
 | Data | Implemented | Observed result |
 |---|---:|---|

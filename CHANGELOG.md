@@ -3,6 +3,22 @@
 The changelog is the authoritative release history for this integration.
 Use this before releases and when opening PRs.
 
+## Unreleased
+
+- Prefer live energy-feed SoC to the latest snapshot's incorrect zero.
+- Poll every five minutes using overlapping ten-minute millisecond SoC
+  windows, with a smaller-window fallback for rejected parameters.
+- Retain valid energy fields during sparse or empty polls and preserve their
+  sample timestamp so cached values do not appear newly measured.
+- Map HTTP 400 parameter errors and HTTP 404 empty feeds to their typed API
+  errors while retaining authentication, rate-limit, and server handling.
+- Correct double scaling of range, odometer, and cell voltages, verified
+  against authenticated ET7 JSON responses and the NIO app/car.
+- Expose complete battery-pack voltage from the energy feed separately from
+  individual cell voltages, with three decimal places for cell measurements.
+- Add a local privacy-preserving API probe that can reuse HA's current access
+  token without independently refreshing or saving it.
+
 ## 0.1.1-dev.4
 
 - Treat NIO's HTTP-success `invalid_grant` token response as a rejected OAuth

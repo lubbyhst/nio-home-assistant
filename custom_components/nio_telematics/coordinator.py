@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -61,7 +62,6 @@ class NioDataUpdateCoordinator(DataUpdateCoordinator[NioVehicleData]):
             vehicle_status = NioSocStatus.from_payload(latest_record)
             self._telemetry["vehicle_status"] = latest_record
             endpoint_status = {"vehicle_status": "success"}
-            energy_status = None
             for endpoint in self._CHANGE_ENDPOINTS:
                 resource = CHANGE_ENDPOINT_RESOURCES.get(endpoint, endpoint)
                 try:
@@ -84,10 +84,18 @@ class NioDataUpdateCoordinator(DataUpdateCoordinator[NioVehicleData]):
                         "Optional NIO endpoint %s unavailable: %s", resource, err
                     )
                     continue
-                self._telemetry[endpoint] = record
-                endpoint_status[endpoint] = "success"
                 if endpoint == "soc_status":
-                    energy_status = NioSocStatus.from_payload(record)
+                    self._telemetry[endpoint] = {
+                        **self._telemetry.get(endpoint, {}),
+                        **{
+                            key: value
+                            for key, value in record.items()
+                            if value is not None
+                        },
+                    }
+                else:
+                    self._telemetry[endpoint] = record
+                endpoint_status[endpoint] = "success"
             try:
                 self._telemetry[
                     "odometer_report"
@@ -115,30 +123,14 @@ class NioDataUpdateCoordinator(DataUpdateCoordinator[NioVehicleData]):
             raise ConfigEntryAuthFailed(str(err)) from err
         except NioApiError as err:
             raise UpdateFailed(str(err)) from err
-        if energy_status is None:
-            soc_status = vehicle_status
-        else:
-            soc_status = type(vehicle_status)(
-                soc=vehicle_status.soc
-                if vehicle_status.soc is not None
-                else energy_status.soc,
-                remaining_range=energy_status.remaining_range,
-                charging_state=energy_status.charging_state
-                if energy_status.charging_state is not None
-                else vehicle_status.charging_state,
-                charging_target=energy_status.charging_target,
-                maximum_soc=energy_status.maximum_soc,
-                high_voltage_battery_current=(
-                    energy_status.high_voltage_battery_current
-                ),
-                event_time=max(
-                    filter(
-                        None,
-                        [vehicle_status.event_time, energy_status.event_time],
-                    ),
-                    default=None,
-                ),
-            )
+        energy_status = NioSocStatus.from_payload(self._telemetry.get("soc_status", {}))
+        # The dedicated energy feed is authoritative. The latest vehicle
+        # snapshot currently reports placeholder SoC/charging values even
+        # when energy data is correct. An empty change feed means no update.
+        soc_status = NioSocStatus.merge(energy_status, vehicle_status)
+        if energy_status.soc is not None:
+            # A new vehicle snapshot must not make cached energy look fresh.
+            soc_status = replace(soc_status, event_time=energy_status.event_time)
         return NioVehicleData(
             vin=self._vin,
             soc_status=soc_status,

@@ -80,6 +80,7 @@ def _simple(
     offset: float = 0,
     invalid_values: tuple[int, ...] = (),
     enabled: bool = False,
+    precision: int | None = None,
 ) -> NioSensorDescription:
     return NioSensorDescription(
         key=key,
@@ -87,12 +88,38 @@ def _simple(
         native_unit_of_measurement=unit,
         device_class=device_class,
         entity_registry_enabled_default=enabled,
+        suggested_display_precision=precision,
         value_fn=_field(endpoint, field, scale, offset, invalid_values),
         source_endpoint=endpoint,
     )
 
 
+def _battery_pack_voltage(data: NioVehicleData) -> float | None:
+    """Read total pack voltage without combining ambiguous multi-pack layouts."""
+    packs = data.telemetry.get("soc_status", {}).get("btry_paks")
+    if not isinstance(packs, list) or len(packs) != 1 or not isinstance(packs[0], dict):
+        return None
+    value = packs[0].get("btry_pak_voltage")
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return None if number in (0xFFFE, 0xFFFF) else number
+
+
 SENSORS: tuple[NioSensorDescription, ...] = (
+    NioSensorDescription(
+        key="battery_pack_voltage",
+        name="Battery pack voltage",
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        device_class=SensorDeviceClass.VOLTAGE,
+        entity_registry_enabled_default=True,
+        suggested_display_precision=1,
+        value_fn=_battery_pack_voltage,
+        source_endpoint="soc_status",
+    ),
     NioSensorDescription(
         key="api_availability",
         name="API availability",
@@ -164,7 +191,6 @@ SENSORS: tuple[NioSensorDescription, ...] = (
         "mileage",
         unit=UnitOfLength.KILOMETERS,
         device_class=SensorDeviceClass.DISTANCE,
-        scale=0.1,
         invalid_values=(0xFFFFFFFE, 0xFFFFFFFF),
         enabled=True,
     ),
@@ -361,8 +387,8 @@ SENSORS: tuple[NioSensorDescription, ...] = (
         "sin_btry_hist_volt",
         unit=UnitOfElectricPotential.VOLT,
         device_class=SensorDeviceClass.VOLTAGE,
-        scale=0.001,
         invalid_values=(0xFFFE, 0xFFFF),
+        precision=3,
     ),
     _simple(
         "lowest_cell_voltage",
@@ -371,8 +397,8 @@ SENSORS: tuple[NioSensorDescription, ...] = (
         "sin_btry_lwst_volt",
         unit=UnitOfElectricPotential.VOLT,
         device_class=SensorDeviceClass.VOLTAGE,
-        scale=0.001,
         invalid_values=(0xFFFE, 0xFFFF),
+        precision=3,
     ),
     _simple(
         "highest_battery_temperature",
