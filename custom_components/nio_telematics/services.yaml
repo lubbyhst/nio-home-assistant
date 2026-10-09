@@ -1,0 +1,88 @@
+query:
+  name: Query NIO API
+  description: Run a read-only NIO API operation on demand and return its response.
+  fields:
+    config_entry_id:
+      name: NIO configuration entry
+      description: Select the configured NIO vehicle/account.
+      required: true
+      selector:
+        config_entry:
+          integration: nio_telematics
+    operation:
+      name: Operation
+      description: Choose one operation from the NIO vehicle and aftersales API.
+      required: true
+      selector:
+        select:
+          options:
+            - vehicle_status_history
+            - adas_snapshots
+            - adas_events
+            - extract_adas_snapshot
+            - download_adas_event
+            - nomi_asr_files
+            - vehicle_recalls
+            - recall_campaign
+    start_time:
+      name: Start time
+      description: Unix timestamp in milliseconds for vehicle status history.
+      selector:
+        number:
+          min: 0
+          mode: box
+    end_time:
+      name: End time
+      description: Unix timestamp in milliseconds for vehicle status history.
+      selector:
+        number:
+          min: 0
+          mode: box
+    start_ts:
+      name: Start timestamp
+      description: Unix timestamp in nanoseconds for ADAS scans.
+      selector:
+        number:
+          min: 0
+          mode: box
+    end_ts:
+      name: End timestamp
+      description: Unix timestamp in nanoseconds for ADAS scans.
+      selector:
+        number:
+          min: 0
+          mode: box
+    limit:
+      name: Limit
+      description: Optional page size for ADAS and NOMI ASR listings.
+      selector:
+        number:
+          min: 0
+          mode: box
+    offset:
+      name: Offset
+      description: Optional page offset for ADAS and NOMI ASR listings.
+      selector:
+        number:
+          min: 0
+          mode: box
+    uuid:
+      name: Data UUID
+      description: Snapshot or event UUID required by extraction and download operations.
+      selector:
+        text:
+    as_url:
+      name: Return URL
+      description: Request the download operation's URL form when supported.
+      selector:
+        boolean:
+    campaign_no:
+      name: Recall campaign number
+      description: Campaign number for recall campaign details.
+      selector:
+        text:
+    accept_language:
+      name: Accept language
+      description: Optional language preference for recall campaign details.
+      selector:
+        text:
