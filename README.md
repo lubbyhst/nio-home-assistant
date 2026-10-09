@@ -41,15 +41,16 @@ data, and use it at your own risk.
 > report is a curiosity; a fleet of matching reports is evidence. EU NIO
 > owners, rally—we are legion, and we need you. 😄
 
-Current development release (`0.1.1-dev.6`):
+Current integration capabilities (development builds):
 
 - polls every documented read-only telemetry category that can provide useful
-  Home Assistant state: body, dynamics, location, trip, energy, cabin,
-  powertrain, diagnostics, and aftersales odometer data;
-- creates 64 stable scalar sensors and 16 disabled diagnostic endpoint sensors;
+  Home Assistant state across 17 endpoints: body, dynamics, location, trip,
+  energy, cabin, powertrain, diagnostics, and aftersales odometer data;
+- creates 65 stable scalar sensors and 17 disabled diagnostic endpoint sensors;
 - preserves variable-length/nested data such as battery cells, motor lists,
   window faults, door structures, and alarm signals as attributes on the
-  corresponding disabled diagnostic sensor;
+  corresponding disabled diagnostic sensor, with sensitive identifiers/locations
+  redacted and payload size limited;
 - uses one coordinator and one Home Assistant device per VIN;
 - redacts credentials and vehicle identifiers from diagnostics;
 - handles authentication, permission, rate-limit, envelope, and transport
@@ -71,6 +72,11 @@ belongs in the owner's Home Assistant configuration.
 Recorder history on the first upgrade when an older version had ended at
 `unknown`. This migration fallback is skipped if Recorder is unavailable.
 
+The response-only `nio_telematics.query` service provides filtered vehicle
+status history and optional ADAS, NOMI ASR, and recall operations without adding
+them to polling. See the [API reference](docs/nio-open-platform-api.md) for the
+operation catalog, parameters, units, and response privacy policy.
+
 Most detailed entities are disabled by default to avoid flooding a new Home
 Assistant installation. **Disabled does not mean broken or denied**; it is only
 the default Home Assistant entity-registry setting. The enabled diagnostic
@@ -82,9 +88,24 @@ IDs.
 
 ## Live API status
 
-The table below is based on hands-on testing against one EU NIO ET5 Touring,
-not on what the API merely promises. Other vehicle models or accounts may
-behave differently.
+Authenticated EU ET7 testing on 2026-10-09 reproduced working energy records
+when charging began. The integration prefers `soc_status/changes` over the
+latest vehicle snapshot's placeholder SoC. It polls every five minutes using
+a ten-minute millisecond window, with a five-minute fallback for rejected
+parameters. Empty polls retain the last valid energy fields. Per-field sample times
+remain separate from unrelated energy updates, the latest vehicle snapshot,
+and fetch time. Replayed/older samples cannot regress cached energy fields.
+Remaining-range restoration across restarts is preserved.
+
+Range and odometer are already in kilometres, and highest/lowest cell voltages
+are already in volts in the tested JSON responses. The enabled **Battery pack
+voltage** sensor uses a single `btry_paks` record; multi-pack topology is left
+unknown. **Highest/lowest cell voltage** are individual cell measurements and
+use three decimal places. These findings are specific to the tested vehicle
+and application; missing provider values such as charging state remain unknown.
+
+The table below is historical EU ET5 Touring evidence. Vehicle models,
+applications, and accounts can behave differently.
 
 | Data | Implemented | Observed result |
 |---|---:|---|
@@ -92,7 +113,7 @@ behave differently.
 | Latest vehicle timestamp/state/mileage | Yes | Working; timestamp and mileage advanced after driving; raw mileage is kilometres |
 | Battery SoC in latest vehicle status | Yes | Returned `0` instead of the vehicle's real SoC |
 | Charging state, battery current/voltage | Yes | Missing, null, or zero in the latest-status response |
-| SoC/range/charging-target change feed | Yes | Range now appears intermittently on the tested ET5 Touring; absent polls still occur. SoC in latest status remains wrong at `0` |
+| SoC/range/charging-target change feed | Yes | Range appeared intermittently on the tested ET5 Touring; absent polls also occurred. SoC in latest status remained wrong at `0` |
 | Body, lights, windows, position, trips, cells, cabin, motor, alarms | Yes | NIO currently returns `permission_denied` |
 | Driving and battery-extremum change feeds | Yes | Request accepted, but currently returns no recent record |
 | Aftersales odometer reports | Yes | NIO currently returns `permission_denied`; the working latest-status mileage is used for the normal odometer sensor |
@@ -210,3 +231,11 @@ vehicle models is especially useful.
 Special thanks to [@lubbyhst](https://github.com/lubbyhst) for early
 cross-vehicle testing, clear issue reports, proposed OAuth and documentation
 improvements, and sharing independent NIO API results.
+
+## Local API troubleshooting
+
+Run `python3 scripts/nio_api_probe.py` to compare snapshot and energy requests
+with a temporary access token and VIN entered through hidden terminal prompts.
+The standard-library script prints only response structure, record age, and
+zero/nonzero indicators. It does not save or refresh credentials. Do not post
+raw API responses or credentials when reporting a result.

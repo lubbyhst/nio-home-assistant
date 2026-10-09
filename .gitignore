@@ -9,3 +9,5 @@ htmlcov/
 secrets.*
 diagnostics*.json
 custom_components/nio_telematics/brand/source.ico
+
+reports/local-*.md
