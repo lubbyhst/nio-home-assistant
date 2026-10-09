@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 _VIN_PATTERN = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$")
+_INVALID_REMAINING_RANGE_VALUES = {0xFFFFFFFE, 0xFFFFFFFF}
 
 
 def normalize_vin(value: str) -> str:
@@ -65,7 +66,7 @@ class NioSocStatus:
         """Parse only fields verified in the official SoC schema."""
         return cls(
             soc=_optional_float(payload.get("soc")),
-            remaining_range=_optional_float(payload.get("remaining_range")),
+            remaining_range=_remaining_range(payload.get("remaining_range")),
             charging_state=_optional_str(payload.get("chrg_state")),
             charging_target=_optional_float(payload.get("chrg_final_soc")),
             maximum_soc=_optional_float(payload.get("max_soc")),
@@ -110,3 +111,11 @@ class NioVehicleData:
     fetched_at: datetime
     telemetry: dict[str, dict[str, Any]]
     endpoint_status: dict[str, str]
+
+
+def _remaining_range(value: Any) -> float | None:
+    """Convert NIO's 0.1 km range value and omit invalid protocol sentinels."""
+    number = _optional_float(value)
+    if number is None or number in _INVALID_REMAINING_RANGE_VALUES:
+        return None
+    return number / 10

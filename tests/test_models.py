@@ -13,7 +13,7 @@ class TestNioModels(unittest.TestCase):
         status = models.NioSocStatus.from_payload(
             {
                 "soc": 51,
-                "remaining_range": 204.5,
+                "remaining_range": 2045,
                 "chrg_state": "charging",
                 "chrg_final_soc": 80,
                 "max_soc": 90,
@@ -40,6 +40,15 @@ class TestNioModels(unittest.TestCase):
         self.assertIsNone(status.charging_state)
         self.assertIsNone(status.event_time)
 
+    def test_remaining_range_uses_tenths_and_omits_invalid_sentinels(self) -> None:
+        status = models.NioSocStatus.from_payload({"remaining_range": 2045})
+        invalid_status = models.NioSocStatus.from_payload(
+            {"remaining_range": 0xFFFFFFFE}
+        )
+
+        self.assertEqual(status.remaining_range, 204.5)
+        self.assertIsNone(invalid_status.remaining_range)
+
     def test_numeric_enum_is_normalized_to_string(self) -> None:
         status = models.NioSocStatus.from_payload({"chrg_state": 3})
 
@@ -59,7 +68,7 @@ class TestNioModels(unittest.TestCase):
         )
         older = models.NioSocStatus.from_payload(
             {
-                "remaining_range": 204.5,
+                "remaining_range": 2045,
                 "chrg_final_soc": 80,
                 "sample_timestamp": 1_760_000_000_000,
             }

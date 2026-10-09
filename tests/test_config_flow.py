@@ -68,11 +68,7 @@ async def test_reauth_reuses_stored_oauth_implementation(
             AsyncMock(return_value=expected_result),
         ) as pick_implementation,
     ):
-        result = await handler.async_step_reauth(
-            {"auth_implementation": "nio-local"}
-        )
+        result = await handler.async_step_reauth({"auth_implementation": "nio-local"})
 
-    pick_implementation.assert_awaited_once_with(
-        {"implementation": "nio-local"}
-    )
+    pick_implementation.assert_awaited_once_with({"implementation": "nio-local"})
     assert result == expected_result

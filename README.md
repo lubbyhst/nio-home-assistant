@@ -47,8 +47,9 @@ Current development release (`0.1.1-dev.4`):
   Home Assistant state across the 17 retained telemetry endpoints: body,
   dynamics, location, trip, energy, cabin, powertrain, diagnostics, and
   aftersales odometer data;
-- intentionally excludes NIO's ADAS file/scan APIs, NOMI ASR file listing, and
-  recall campaign/history APIs;
+- exposes all 24 vehicle/aftersales API operations, with the ADAS, NOMI ASR,
+  and recall operations available through the response-only
+  `nio_telematics.query` service;
 - creates 64 stable scalar sensors and 17 disabled diagnostic endpoint sensors;
 - preserves variable-length/nested data such as battery cells, motor lists,
   window faults, door structures, and alarm signals as attributes on the
@@ -75,9 +76,13 @@ IDs.
 
 ## Live API status
 
-The table below is based on hands-on testing against one EU NIO ET5 Touring,
-not on what the API merely promises. Other vehicle models or accounts may
-behave differently.
+The table below records hands-on testing against one EU NIO ET5 Touring on
+2026-09-06, before the portal schema refresh checked on 2026-10-09. Other
+vehicle models or accounts may behave differently. The current portal documents
+raw vehicle mileage in 0.1 km increments and range in 0.1 km units; those
+conversions now follow the current contract and need a fresh authenticated
+vehicle comparison before the historical values below should be treated as
+current.
 
 | Data | Implemented | Observed result |
 |---|---:|---|
@@ -133,8 +138,8 @@ that NIO still denies remain isolated as
 `permission_denied` rather than taking the integration offline.
 Automated tests, hassfest, and HACS repository validation run on every push.
 
-The retained endpoint inventory and the intentionally excluded public API
-families are documented in [docs/nio-open-platform-api.md](docs/nio-open-platform-api.md).
+The full endpoint inventory, units, and on-demand access model are documented
+in [docs/nio-open-platform-api.md](docs/nio-open-platform-api.md).
 
 Never commit a Client ID, Client Secret, VIN, access token, refresh token, or
 diagnostic payload containing personal vehicle data.

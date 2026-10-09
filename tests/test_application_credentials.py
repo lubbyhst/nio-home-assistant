@@ -95,7 +95,11 @@ async def test_invalid_grant_envelope_requires_reauth(
     }
     assert not error.value.request_info.headers
     assert "invalid_grant" in str(error.value)
-    for secret in ("client-id-secret-marker", "client-secret-marker", "refresh-token-marker"):
+    for secret in (
+        "client-id-secret-marker",
+        "client-secret-marker",
+        "refresh-token-marker",
+    ):
         assert secret not in str(error.value)
         assert secret not in caplog.text
 
@@ -144,7 +148,9 @@ async def test_token_network_timeout_is_retryable(hass: HomeAssistant) -> None:
 async def test_malformed_success_envelope_is_not_reauth(hass: HomeAssistant) -> None:
     """A malformed provider response is not evidence of a rejected grant."""
     session = MagicMock()
-    session.post = AsyncMock(return_value=token_response(200, {"result_code": "success"}))
+    session.post = AsyncMock(
+        return_value=token_response(200, {"result_code": "success"})
+    )
     with (
         patch(
             "custom_components.nio_telematics.application_credentials.async_get_clientsession",

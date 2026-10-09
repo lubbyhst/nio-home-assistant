@@ -22,9 +22,7 @@ class TestAvailability(unittest.TestCase):
             "partial",
         )
         self.assertEqual(
-            availability.overall_availability(
-                {"door_status": "permission_denied"}
-            ),
+            availability.overall_availability({"door_status": "permission_denied"}),
             "unavailable",
         )
 
@@ -40,9 +38,5 @@ class TestAvailability(unittest.TestCase):
 
         self.assertEqual(attributes["working_endpoints"], ["vehicle_status"])
         self.assertEqual(attributes["empty_endpoints"], ["soc_status"])
-        self.assertEqual(
-            attributes["permission_denied_endpoints"], ["door_status"]
-        )
-        self.assertEqual(
-            attributes["error_endpoints"], {"trip_status": "NioApiError"}
-        )
+        self.assertEqual(attributes["permission_denied_endpoints"], ["door_status"])
+        self.assertEqual(attributes["error_endpoints"], {"trip_status": "NioApiError"})

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from typing import Any
+from urllib.parse import quote
 
 from aiohttp import ClientError, ClientResponse
 from homeassistant.helpers.config_entry_oauth2_flow import (
@@ -28,7 +29,6 @@ _SAFE_RESPONSE_HEADERS = {
     "x-ratelimit-remaining",
     "x-ratelimit-reset",
 }
-_MILLISECONDS_PER_SECOND = 1_000
 _SOC_WINDOW_CANDIDATES_SECONDS = (
     12 * 60 * 60,
     6 * 60 * 60,
@@ -37,6 +37,17 @@ _SOC_WINDOW_CANDIDATES_SECONDS = (
     30 * 60,
     10 * 60,
 )
+ON_DEMAND_OPERATION_IDS = {
+    "vehicle_status_history": "getVehicleStatusChanges",
+    "adas_snapshots": "getDlbSnapshot",
+    "adas_events": "getDlbEvent",
+    "extract_adas_snapshot": "extractDlbSnapshot",
+    "download_adas_event": "downloadDlbEvent",
+    "nomi_asr_files": "getASRFileList",
+    "vehicle_recalls": "getVehicleRecallHistory",
+    "recall_campaign": "getRecallCampaigns",
+}
+ON_DEMAND_OPERATIONS = tuple(ON_DEMAND_OPERATION_IDS)
 
 
 class NioApiError(Exception):
@@ -93,15 +104,12 @@ class NioApiClient:
         )
         last_error: NioInvalidParameterError | None = None
         for window_seconds in windows:
-            end_milliseconds = end_seconds * _MILLISECONDS_PER_SECOND
             try:
                 payload = await self._async_get(
                     path,
                     params={
-                        "start_time": (
-                            end_milliseconds - window_seconds * _MILLISECONDS_PER_SECOND
-                        ),
-                        "end_time": end_milliseconds,
+                        "start_time": end_seconds - window_seconds,
+                        "end_time": end_seconds,
                     },
                 )
             except NioInvalidParameterError as err:
@@ -181,15 +189,114 @@ class NioApiClient:
         _LOGGER.debug("NIO latest vehicle response fields: %s", sorted(data))
         return NioSocStatus.from_payload(data)
 
-    async def _async_get(
-        self, path: str, *, params: dict[str, int] | None = None
+    async def async_call_on_demand(
+        self, operation: str, vin: str, **values: Any
     ) -> dict[str, Any]:
-        request_kwargs: dict[str, Any] = {"headers": {"Accept": "application/json"}}
+        """Call one allowlisted API operation without changing coordinator polling."""
+        operation_specs: dict[str, tuple[str, str, dict[str, str], tuple[str, ...]]] = {
+            "vehicle_status_history": (
+                "GET",
+                f"{TELEMATICS_PATH}/vehicles/{vin}/vehicle_status/changes",
+                {"start_time": "start_time", "end_time": "end_time"},
+                (),
+            ),
+            "adas_snapshots": (
+                "GET",
+                f"{TELEMATICS_PATH}/vehicles/{vin}/adas/snapshot",
+                {
+                    "start_ts": "startTs",
+                    "end_ts": "endTs",
+                    "limit": "limit",
+                    "offset": "offset",
+                },
+                (),
+            ),
+            "adas_events": (
+                "GET",
+                f"{TELEMATICS_PATH}/vehicles/{vin}/adas/event",
+                {
+                    "start_ts": "startTs",
+                    "end_ts": "endTs",
+                    "limit": "limit",
+                    "offset": "offset",
+                },
+                (),
+            ),
+            "extract_adas_snapshot": (
+                "POST",
+                f"{TELEMATICS_PATH}/vehicles/{vin}/adas/snapshot/extract",
+                {"uuid": "uuid"},
+                ("uuid",),
+            ),
+            "download_adas_event": (
+                "POST",
+                f"{TELEMATICS_PATH}/vehicles/{vin}/adas/event/download",
+                {"uuid": "uuid", "as_url": "asUrl"},
+                ("uuid",),
+            ),
+            "nomi_asr_files": (
+                "GET",
+                f"{TELEMATICS_PATH}/vehicles/{vin}/nomi/asr",
+                {"offset": "offset", "limit": "limit"},
+                (),
+            ),
+            "vehicle_recalls": (
+                "GET",
+                f"{TELEMATICS_PATH}/aftersales/vehicles/{vin}/recalls",
+                {},
+                (),
+            ),
+            "recall_campaign": ("GET", "", {}, ("campaign_no",)),
+        }
+        if operation not in operation_specs:
+            raise ValueError(f"Unsupported NIO operation: {operation}")
+        method, path, query_names, required = operation_specs[operation]
+        allowed = set(query_names) | set(required)
+        if operation == "recall_campaign":
+            allowed.add("accept_language")
+        if set(values) - allowed:
+            raise ValueError(f"Unsupported parameters for {operation}")
+        if any(values.get(name) is None for name in required):
+            raise ValueError(f"Missing required parameters for {operation}")
+
+        headers = {}
+        if language := values.get("accept_language"):
+            headers["Accept-Language"] = str(language)
+        if operation == "recall_campaign":
+            path = (
+                f"{TELEMATICS_PATH}/aftersales/recall_campaigns/"
+                f"{quote(str(values['campaign_no']), safe='')}"
+            )
+        params = {
+            api_name: values[service_name]
+            for service_name, api_name in query_names.items()
+            if service_name in values
+        }
+        return await self._async_request(
+            method, path, params=params or None, headers=headers
+        )
+
+    async def _async_get(
+        self, path: str, *, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        return await self._async_request("GET", path, params=params)
+
+    async def _async_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        request_kwargs: dict[str, Any] = {
+            "headers": {"Accept": "application/json", **(headers or {})}
+        }
         if params is not None:
             request_kwargs["params"] = params
         try:
             response = await self._oauth_session.async_request(
-                "GET",
+                method,
                 f"{self._base_url}{path}",
                 **request_kwargs,
             )
@@ -197,7 +304,9 @@ class NioApiClient:
             # HA's OAuth2Session starts the native reauth flow for this error.
             raise
         except OAuth2TokenRequestTransientError as err:
-            raise NioApiError("NIO OAuth token service is temporarily unavailable") from err
+            raise NioApiError(
+                "NIO OAuth token service is temporarily unavailable"
+            ) from err
         except OAuth2TokenRequestError as err:
             raise NioApiError("NIO OAuth token request failed") from err
         except ClientError as err:
@@ -236,7 +345,7 @@ class NioApiClient:
         if not isinstance(payload, dict):
             raise NioApiError("NIO returned an invalid response envelope")
         result_code = payload.get("result_code")
-        if result_code == "access_denied":
+        if result_code in {"access_denied", "permission_denied", "forbidden"}:
             raise NioPermissionError("NIO OAuth grant lacks the required scope")
         if result_code == "resource_not_found":
             raise NioResourceNotFoundError("NIO resource was not found")

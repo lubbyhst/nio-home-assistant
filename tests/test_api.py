@@ -42,7 +42,7 @@ async def test_soc_request_uses_largest_window_and_newest_record(
                 "data": [
                     {
                         "soc": 40,
-                        "remaining_range": 204.5,
+                        "remaining_range": 2045,
                         "chrg_final_soc": 80,
                         "sample_timestamp": 1_760_000_000_000,
                     },
@@ -62,8 +62,8 @@ async def test_soc_request_uses_largest_window_and_newest_record(
     assert request.args[0] == "GET"
     assert request.args[1].endswith("/vehicles/LJNABC12345678901/soc_status/changes")
     assert request.kwargs["params"] == {
-        "start_time": 1_956_800_000,
-        "end_time": 2_000_000_000,
+        "start_time": 1_956_800,
+        "end_time": 2_000_000,
     }
     assert "Authorization" not in request.kwargs["headers"]
 
@@ -95,8 +95,8 @@ async def test_soc_request_retries_and_caches_smaller_window(
     assert oauth_session.async_request.await_count == 2
     request = oauth_session.async_request.await_args
     assert request.kwargs["params"] == {
-        "start_time": 1_978_400_000,
-        "end_time": 2_000_000_000,
+        "start_time": 1_978_400,
+        "end_time": 2_000_000,
     }
 
     oauth_session.async_request.reset_mock()
@@ -114,8 +114,8 @@ async def test_soc_request_retries_and_caches_smaller_window(
     assert oauth_session.async_request.await_count == 1
     cached_request = oauth_session.async_request.await_args
     assert cached_request.kwargs["params"] == {
-        "start_time": 1_978_400_000,
-        "end_time": 2_000_000_000,
+        "start_time": 1_978_400,
+        "end_time": 2_000_000,
     }
 
 
@@ -224,9 +224,7 @@ async def test_all_retained_change_endpoints_use_documented_paths(
     await client.async_get_change_record("LJNABC12345678901", resource)
 
     request = oauth_session.async_request.await_args
-    assert request.args[1].endswith(
-        f"/vehicles/LJNABC12345678901/{resource}/changes"
-    )
+    assert request.args[1].endswith(f"/vehicles/LJNABC12345678901/{resource}/changes")
 
 
 async def test_odometer_reports_use_documented_path() -> None:
@@ -258,23 +256,117 @@ async def test_vehicle_status_changes_uses_change_endpoint() -> None:
             200,
             {
                 "result_code": "success",
-                "data": [
-                    {"vehl_state": "PARKED_VEHICLE", "sample_timestamp": 2000}
-                ],
+                "data": [{"vehl_state": "PARKED_VEHICLE", "sample_timestamp": 2000}],
             },
         )
     )
     client = NioApiClient(oauth_session, API_BASE_URL)
 
-    record = await client.async_get_change_record(
-        "LJNABC12345678901", "vehicle_status"
-    )
+    record = await client.async_get_change_record("LJNABC12345678901", "vehicle_status")
 
     assert record["vehl_state"] == "PARKED_VEHICLE"
     request = oauth_session.async_request.await_args
     assert request.args[1].endswith(
         "/vehicles/LJNABC12345678901/vehicle_status/changes"
     )
+
+
+@pytest.mark.parametrize(
+    ("operation", "params", "method", "suffix", "expected_params", "headers"),
+    [
+        (
+            "vehicle_status_history",
+            {"start_time": 1_759_900_000, "end_time": 1_760_000_000},
+            "GET",
+            "/vehicles/{vin}/vehicle_status/changes",
+            {"start_time": 1_759_900_000, "end_time": 1_760_000_000},
+            {"Accept": "application/json"},
+        ),
+        (
+            "adas_snapshots",
+            {"start_ts": 1_759_900_000_000_000_000, "limit": 10, "offset": 0},
+            "GET",
+            "/vehicles/{vin}/adas/snapshot",
+            {"startTs": 1_759_900_000_000_000_000, "limit": 10, "offset": 0},
+            {"Accept": "application/json"},
+        ),
+        (
+            "adas_events",
+            {"end_ts": 1_760_000_000_000_000_000, "limit": 5},
+            "GET",
+            "/vehicles/{vin}/adas/event",
+            {"endTs": 1_760_000_000_000_000_000, "limit": 5},
+            {"Accept": "application/json"},
+        ),
+        (
+            "extract_adas_snapshot",
+            {"uuid": "snapshot-uuid"},
+            "POST",
+            "/vehicles/{vin}/adas/snapshot/extract",
+            {"uuid": "snapshot-uuid"},
+            {"Accept": "application/json"},
+        ),
+        (
+            "download_adas_event",
+            {"uuid": "event-uuid", "as_url": True},
+            "POST",
+            "/vehicles/{vin}/adas/event/download",
+            {"uuid": "event-uuid", "asUrl": True},
+            {"Accept": "application/json"},
+        ),
+        (
+            "nomi_asr_files",
+            {"limit": 20, "offset": 40},
+            "GET",
+            "/vehicles/{vin}/nomi/asr",
+            {"limit": 20, "offset": 40},
+            {"Accept": "application/json"},
+        ),
+        (
+            "vehicle_recalls",
+            {},
+            "GET",
+            "/aftersales/vehicles/{vin}/recalls",
+            None,
+            {"Accept": "application/json"},
+        ),
+        (
+            "recall_campaign",
+            {"campaign_no": "RC-2026-001", "accept_language": "de-DE"},
+            "GET",
+            "/aftersales/recall_campaigns/RC-2026-001",
+            None,
+            {"Accept": "application/json", "Accept-Language": "de-DE"},
+        ),
+    ],
+)
+async def test_on_demand_operations_match_official_paths_and_parameters(
+    operation, params, method, suffix, expected_params, headers
+) -> None:
+    oauth_session = MagicMock()
+    oauth_session.async_request = AsyncMock(
+        return_value=response(200, {"result_code": "success", "data": {}})
+    )
+    client = NioApiClient(oauth_session, API_BASE_URL)
+
+    await client.async_call_on_demand(operation, "LJNABC12345678901", **params)
+
+    request = oauth_session.async_request.await_args
+    assert request.args[0] == method
+    path = request.args[1].removeprefix(API_BASE_URL)
+    assert path == f"/api/1/telematics{suffix.replace('{vin}', 'LJNABC12345678901')}"
+    if expected_params:
+        assert request.kwargs["params"] == expected_params
+    else:
+        assert "params" not in request.kwargs
+    assert request.kwargs["headers"] == headers
+
+
+async def test_on_demand_operations_reject_unknown_operation() -> None:
+    client = NioApiClient(MagicMock(), API_BASE_URL)
+
+    with pytest.raises(ValueError, match="Unsupported NIO operation"):
+        await client.async_call_on_demand("arbitrary_path", "LJNABC12345678901")
 
 
 async def test_debug_trace_is_complete_but_redacts_sensitive_data(caplog) -> None:
@@ -291,6 +383,8 @@ async def test_debug_trace_is_complete_but_redacts_sensitive_data(caplog) -> Non
                     "chrg_state": 3,
                     "access_token": "must-not-leak",
                     "longitude": 4.123,
+                    "url": "https://s3.example.test/report?signature=must-not-leak",
+                    "uuid": "record-uuid-must-not-leak",
                 },
             },
             {"Content-Type": "application/json", "Set-Cookie": "private"},
@@ -309,6 +403,8 @@ async def test_debug_trace_is_complete_but_redacts_sensitive_data(caplog) -> Non
     assert "LJNABC12345678901" not in trace
     assert "must-not-leak" not in trace
     assert "4.123" not in trace
+    assert "https://s3.example.test" not in trace
+    assert "record-uuid-must-not-leak" not in trace
     assert "private" not in trace
 
 
@@ -327,6 +423,17 @@ async def test_envelope_access_denied_is_mapped() -> None:
     oauth_session = MagicMock()
     oauth_session.async_request = AsyncMock(
         return_value=response(200, {"result_code": "access_denied"})
+    )
+    client = NioApiClient(oauth_session, API_BASE_URL)
+
+    with pytest.raises(NioPermissionError):
+        await client.async_get_latest_vehicle_status("LJNABC12345678901")
+
+
+async def test_envelope_permission_denied_is_mapped() -> None:
+    oauth_session = MagicMock()
+    oauth_session.async_request = AsyncMock(
+        return_value=response(200, {"result_code": "permission_denied"})
     )
     client = NioApiClient(oauth_session, API_BASE_URL)
 

@@ -17,9 +17,7 @@ def test_diagnostic_attributes_redact_sensitive_values_and_bound_lists() -> None
         "longitude": 13.4,
         "access_token": "secret",
         "download_url": "https://example.invalid/private",
-        "records": [
-            {"value": index} for index in range(MAX_DIAGNOSTIC_LIST_ITEMS + 5)
-        ],
+        "records": [{"value": index} for index in range(MAX_DIAGNOSTIC_LIST_ITEMS + 5)],
     }
 
     attributes = safe_diagnostic_attributes(payload)

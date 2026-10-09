@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -145,3 +146,9 @@ class NioDataUpdateCoordinator(DataUpdateCoordinator[NioVehicleData]):
             telemetry=dict(self._telemetry),
             endpoint_status=endpoint_status,
         )
+
+    async def async_call_on_demand(
+        self, operation: str, **params: Any
+    ) -> dict[str, Any]:
+        """Call a catalog operation without adding it to periodic polling."""
+        return await self._client.async_call_on_demand(operation, self._vin, **params)

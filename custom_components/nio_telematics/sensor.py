@@ -30,7 +30,7 @@ from .const import SUPPORTED_ENDPOINTS
 from .coordinator import NioDataUpdateCoordinator
 from .entity import NioEntity
 from .models import NioVehicleData
-from .privacy import safe_diagnostic_attributes
+from .privacy import redact_sensitive_data, safe_diagnostic_attributes
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -43,16 +43,27 @@ class NioSensorDescription(SensorEntityDescription):
 
 
 def _field(
-    endpoint: str, field: str, scale: float = 1, offset: float = 0
+    endpoint: str,
+    field: str,
+    scale: float = 1,
+    offset: float = 0,
+    invalid_values: tuple[int, ...] = (),
 ) -> Callable[[NioVehicleData], Any]:
     def value(data: NioVehicleData) -> Any:
         current = data.telemetry.get(endpoint, {}).get(field)
-        if current is None or isinstance(current, bool) or (scale == 1 and offset == 0):
+        if current is None or isinstance(current, bool):
             return current
         try:
-            return float(current) * scale + offset
+            numeric = float(current)
         except (TypeError, ValueError):
+            if scale == 1 and offset == 0 and not invalid_values:
+                return current
             return None
+        if numeric in invalid_values:
+            return None
+        if scale == 1 and offset == 0:
+            return current
+        return numeric * scale + offset
 
     return value
 
@@ -67,6 +78,7 @@ def _simple(
     device_class: SensorDeviceClass | None = None,
     scale: float = 1,
     offset: float = 0,
+    invalid_values: tuple[int, ...] = (),
     enabled: bool = False,
 ) -> NioSensorDescription:
     return NioSensorDescription(
@@ -75,7 +87,7 @@ def _simple(
         native_unit_of_measurement=unit,
         device_class=device_class,
         entity_registry_enabled_default=enabled,
-        value_fn=_field(endpoint, field, scale, offset),
+        value_fn=_field(endpoint, field, scale, offset, invalid_values),
         source_endpoint=endpoint,
     )
 
@@ -143,6 +155,7 @@ SENSORS: tuple[NioSensorDescription, ...] = (
         "speed",
         unit=UnitOfSpeed.KILOMETERS_PER_HOUR,
         scale=0.1,
+        invalid_values=(0xFFFE, 0xFFFF),
     ),
     _simple(
         "odometer",
@@ -151,6 +164,8 @@ SENSORS: tuple[NioSensorDescription, ...] = (
         "mileage",
         unit=UnitOfLength.KILOMETERS,
         device_class=SensorDeviceClass.DISTANCE,
+        scale=0.1,
+        invalid_values=(0xFFFFFFFE, 0xFFFFFFFF),
         enabled=True,
     ),
     _simple(
@@ -161,6 +176,7 @@ SENSORS: tuple[NioSensorDescription, ...] = (
         unit=UnitOfElectricPotential.VOLT,
         device_class=SensorDeviceClass.VOLTAGE,
         scale=0.1,
+        invalid_values=(0xFFFE, 0xFFFF),
     ),
     _simple(
         "vehicle_current",
@@ -171,6 +187,7 @@ SENSORS: tuple[NioSensorDescription, ...] = (
         device_class=SensorDeviceClass.CURRENT,
         scale=0.1,
         offset=-1000,
+        invalid_values=(0xFFFE, 0xFFFF),
     ),
     _simple("dc_dc_status", "DC-DC converter status", "vehicle_status", "dc_dc_sts"),
     _simple("gear", "Gear", "vehicle_status", "gear"),
@@ -345,6 +362,7 @@ SENSORS: tuple[NioSensorDescription, ...] = (
         unit=UnitOfElectricPotential.VOLT,
         device_class=SensorDeviceClass.VOLTAGE,
         scale=0.001,
+        invalid_values=(0xFFFE, 0xFFFF),
     ),
     _simple(
         "lowest_cell_voltage",
@@ -354,6 +372,7 @@ SENSORS: tuple[NioSensorDescription, ...] = (
         unit=UnitOfElectricPotential.VOLT,
         device_class=SensorDeviceClass.VOLTAGE,
         scale=0.001,
+        invalid_values=(0xFFFE, 0xFFFF),
     ),
     _simple(
         "highest_battery_temperature",
@@ -363,6 +382,7 @@ SENSORS: tuple[NioSensorDescription, ...] = (
         unit=UnitOfTemperature.CELSIUS,
         device_class=SensorDeviceClass.TEMPERATURE,
         offset=-40,
+        invalid_values=(0xFE, 0xFF),
     ),
     _simple(
         "lowest_battery_temperature",
@@ -372,6 +392,7 @@ SENSORS: tuple[NioSensorDescription, ...] = (
         unit=UnitOfTemperature.CELSIUS,
         device_class=SensorDeviceClass.TEMPERATURE,
         offset=-40,
+        invalid_values=(0xFE, 0xFF),
     ),
     _simple(
         "discharged_energy",
@@ -491,4 +512,4 @@ class NioSensor(NioEntity, SensorEntity):
                 "source_endpoint": endpoint,
                 "endpoint_status": self.coordinator.data.endpoint_status.get(endpoint),
             }
-        return attributes or None
+        return redact_sensitive_data(attributes) or None
