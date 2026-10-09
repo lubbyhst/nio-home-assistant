@@ -15,7 +15,33 @@ supported integration, or affiliated with NIO, Home Assistant, or OpenAI.
 It is experimental software. Review it, protect your credentials and vehicle
 data, and use it at your own risk.
 
-Current development milestone (`0.1.1-dev.1`):
+## EU NIO owners: we need your help
+
+> [!IMPORTANT]
+> **EU NIO owners: we need you.**
+>
+> We all want reliable battery SoC in Home Assistant, but the official API is
+> currently returning missing or incorrect telemetry. We need more owners,
+> vehicles, and countries to produce clear evidence and make the problem
+> visible enough for NIO to investigate and fix it.
+>
+> Install the current development release, compare its values with the car or
+> NIO app, and share your vehicle model, EU country, application type, and
+> redacted endpoint results in the dedicated [EU telemetry test-report
+> discussion](https://github.com/nicolasvangeluwe/nio-home-assistant/discussions/6).
+>
+> If you also receive SoC `0`, `resource_not_found`, or unexpected
+> `permission_denied` responses, please report the behaviour to
+> [`api@nio.io`](mailto:api@nio.io) or through your national NIO contact or
+> importer. Ask for a ticket/reference number and add it to the discussion. If
+> you know a more direct route to NIO's Open Telematics/API team, an
+> introduction would be enormously helpful.
+>
+> Never post credentials, tokens, a full VIN, or precise location data. One
+> report is a curiosity; a fleet of matching reports is evidence. EU NIO
+> owners, rally—we are legion, and we need you. 😄
+
+Current development release (`0.1.1-dev.4`):
 
 - polls every documented read-only telemetry category that can provide useful
   Home Assistant state across the 17 retained telemetry endpoints: body,
@@ -32,6 +58,11 @@ Current development milestone (`0.1.1-dev.1`):
 - handles authentication, permission, rate-limit, envelope, and transport
   errors separately, and keeps unavailable optional feeds from breaking feeds
   that do work.
+
+`0.1.1-dev.4` also fixes NIO's HTTP-success `invalid_grant` refresh response:
+Home Assistant now opens its native reauthentication repair for rejected
+authorization, while temporary token-service failures remain retryable. This
+does not change NIO's upstream SoC or endpoint-permission behavior.
 
 Most detailed entities are disabled by default to avoid flooding a new Home
 Assistant installation. **Disabled does not mean broken or denied**; it is only
@@ -50,7 +81,7 @@ behave differently.
 
 | Data | Implemented | Observed result |
 |---|---:|---|
-| OAuth authorization, refresh and user info | Yes | Working |
+| OAuth authorization, refresh and user info | Yes | Working after restart; a rejected refresh grant now triggers native HA reauthentication (cause of NIO's rejection unknown) |
 | Latest vehicle timestamp/state/mileage | Yes | Working; timestamp and mileage advanced after driving; raw mileage is kilometres |
 | Battery SoC in latest vehicle status | Yes | Returned `0` instead of the vehicle's real SoC |
 | Charging state, battery current/voltage | Yes | Missing, null, or zero in the latest-status response |
@@ -110,13 +141,68 @@ diagnostic payload containing personal vehicle data.
 
 ## Installation and configuration
 
-Install the integration through HACS or copy `custom_components/nio_telematics`
-into Home Assistant's `custom_components` directory. When adding the
-integration, create or open an application in the [NIO Open Telematics
-developer console](https://open-eu.nio.com/console), set its redirect URL to
-[https://my.home-assistant.io](https://my.home-assistant.io), and enter the
-application's Client ID and Client Secret when prompted by Home Assistant.
+### Install with HACS
+
+HACS must already be installed in Home Assistant.
+
+[![Open your Home Assistant instance and open this repository in
+HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=nicolasvangeluwe&repository=nio-home-assistant&category=integration)
+
+Select the button above for the easiest installation. If the link cannot reach
+your Home Assistant instance, add the repository manually:
+
+1. Open **HACS** in Home Assistant.
+2. Open the three-dot menu in the upper-right corner and select
+   **Custom repositories**.
+3. Enter this repository URL:
+   `https://github.com/nicolasvangeluwe/nio-home-assistant`
+4. Select **Integration** as the category, then select **Add**.
+5. Open **NIO Open Telematics** in HACS and select **Download**. Choose the
+   latest development release when HACS asks for a version.
+6. Restart Home Assistant after the download finishes.
+
+These steps follow the official [HACS custom-repository
+instructions](https://www.hacs.xyz/docs/faq/custom_repositories/).
+
+### Configure NIO and Home Assistant
+
+In the [NIO Open Telematics developer
+console](https://open-eu.nio.com/console), create or open a Personal
+Application using the OAuth Authorization Code flow and set its redirect URI
+exactly to:
+
+`https://my.home-assistant.io/redirect/oauth`
+
+Then:
+
+1. In Home Assistant, open **Settings > Devices & services**.
+2. Select **Add integration**, search for **NIO Open Telematics**, and select
+   it.
+3. Enter the Personal Application's Client ID and Client Secret when prompted.
+4. Complete NIO authorization, then enter the vehicle name and 17-character
+   VIN.
+
+If the integration is missing from **Add integration** after the restart,
+clear or hard-refresh the browser cache and try again.
+
+### Manual installation
+
+As an alternative to HACS, copy `custom_components/nio_telematics` into Home
+Assistant's `custom_components` directory and restart Home Assistant. Future
+updates must then also be installed manually.
 
 ## Changelog
 
 See [CHANGELOG.md](./CHANGELOG.md) for public release notes and version history.
+
+## Contributing
+
+Please read [CONTRIBUTING.md](./CONTRIBUTING.md) and open an issue or discussion
+before starting code changes. Testing with other eligible NIO applications and
+vehicle models is especially useful.
+
+## Acknowledgements
+
+Special thanks to [@lubbyhst](https://github.com/lubbyhst) for early
+cross-vehicle testing, clear issue reports, proposed OAuth and documentation
+improvements, and sharing independent NIO API results.

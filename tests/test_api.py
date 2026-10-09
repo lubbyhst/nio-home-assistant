@@ -4,6 +4,10 @@ import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from homeassistant.helpers.config_entry_oauth2_flow import (
+    OAuth2TokenRequestReauthError,
+    OAuth2TokenRequestTransientError,
+)
 
 from custom_components.nio_telematics.api import (
     NioApiClient,
@@ -346,3 +350,33 @@ async def test_http_errors_are_mapped(status, headers, error) -> None:
         await client.async_get_soc_status("LJNABC12345678901")
     if error is NioRateLimitError:
         assert raised.value.retry_after == 30
+
+
+async def test_refresh_rejection_reaches_coordinator() -> None:
+    """The API client must not misclassify HA's reauth error as a network error."""
+    oauth_session = MagicMock()
+    oauth_session.async_request = AsyncMock(
+        side_effect=OAuth2TokenRequestReauthError(
+            request_info=MagicMock(), domain="nio_telematics"
+        )
+    )
+    client = NioApiClient(oauth_session, API_BASE_URL)
+
+    with pytest.raises(OAuth2TokenRequestReauthError):
+        await client.async_get_latest_vehicle_record("LJNABC12345678901")
+
+
+async def test_transient_refresh_failure_is_retryable() -> None:
+    """A temporary OAuth failure becomes an ordinary coordinator retry."""
+    oauth_session = MagicMock()
+    oauth_session.async_request = AsyncMock(
+        side_effect=OAuth2TokenRequestTransientError(
+            request_info=MagicMock(), domain="nio_telematics"
+        )
+    )
+    client = NioApiClient(oauth_session, API_BASE_URL)
+
+    with pytest.raises(NioApiError, match="temporarily unavailable") as error:
+        await client.async_get_latest_vehicle_record("LJNABC12345678901")
+
+    assert not isinstance(error.value, OAuth2TokenRequestReauthError)

@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.config_entry_oauth2_flow import OAuth2TokenRequestReauthError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import (
@@ -100,6 +101,10 @@ class NioDataUpdateCoordinator(DataUpdateCoordinator[NioVehicleData]):
                 )
             except NioApiError as err:
                 endpoint_status["odometer_report"] = type(err).__name__
+        except OAuth2TokenRequestReauthError as err:
+            raise ConfigEntryAuthFailed(
+                "NIO OAuth authorization expired; reauthentication is required"
+            ) from err
         except (NioAuthenticationError, NioPermissionError) as err:
             if isinstance(err, NioPermissionError):
                 raise ConfigEntryAuthFailed(

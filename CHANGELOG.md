@@ -3,7 +3,30 @@
 The changelog is the authoritative release history for this integration.
 Use this before releases and when opening PRs.
 
-## Unreleased
+## 0.1.1-dev.4
+
+- Treat NIO's HTTP-success `invalid_grant` token response as a rejected OAuth
+  authorization so Home Assistant starts its native reauthentication flow.
+- Keep temporary token-service and network failures retryable instead of
+  prompting for authorization.
+- Prevent OAuth exceptions from exposing request credentials or provider
+  response text, and add regression tests for wrapped error responses.
+
+## 0.1.1-dev.3
+
+- Credit the project's first external tester and contributor, `@lubbyhst`.
+- Add a prominent public call for EU NIO owners to test, report redacted API
+  results, and help establish a working NIO developer-support channel.
+- Expand the installation guide with exact HACS custom-repository, download,
+  restart, and Home Assistant configuration steps.
+- Add and link a dedicated EU telemetry report discussion with a structured,
+  privacy-safe model and country compatibility template.
+- Add a one-click My Home Assistant button for opening the custom repository
+  directly in HACS.
+- Declare the currently documented European NIO markets in `hacs.json` for
+  country-aware HACS discovery and the default-repository submission.
+
+## 0.1.1-dev.2
 
 - Prepare and maintain this public changelog file for HACS users.
 - Add vehicle-status change-feed coverage and a centralized inventory for all
@@ -11,6 +34,10 @@ Use this before releases and when opening PRs.
 - Bound and redact detailed endpoint attributes before exposing them in Home
   Assistant state.
 - Document the intentionally excluded ADAS, NOMI ASR, and recall APIs.
+- Document the exact Home Assistant OAuth redirect URI in the installation
+  guide and application-credentials prompt.
+- Add contribution guidelines covering issue-first coordination, testing,
+  privacy, and pull requests.
 
 ## 0.1.1-dev.1
 
