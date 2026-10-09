@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
+    RestoreSensor,
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
@@ -473,11 +476,16 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     coordinator: NioDataUpdateCoordinator = entry.runtime_data
-    async_add_entities(NioSensor(coordinator, description) for description in SENSORS)
+    async_add_entities(
+        NioRangeSensor(coordinator, description)
+        if description.key == "remaining_range"
+        else NioSensor(coordinator, description)
+        for description in SENSORS
+    )
 
 
-class NioSensor(NioEntity, SensorEntity):
-    """Representation of a NIO telemetry sensor."""
+class NioSensorEntity(NioEntity):
+    """Shared NIO sensor implementation, independent of restoration policy."""
 
     entity_description: NioSensorDescription
 
@@ -507,3 +515,52 @@ class NioSensor(NioEntity, SensorEntity):
                 "endpoint_status": self.coordinator.data.endpoint_status.get(endpoint),
             }
         return attributes or None
+
+
+class NioSensor(NioSensorEntity, SensorEntity):
+    """Representation of a NIO telemetry sensor."""
+
+
+class NioRangeSensor(NioSensorEntity, RestoreSensor):
+    """Keep the last actual range when NIO omits it from sparse updates."""
+
+    _restored_range: float | None = None
+    _restored_sample_time: str | None = None
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_data = await self.async_get_last_sensor_data()
+        if last_data is None:
+            return
+        try:
+            value = float(last_data.native_value)
+        except (TypeError, ValueError):
+            return
+        if math.isfinite(value) and value >= 0:
+            self._restored_range = value
+            last_state = await self.async_get_last_state()
+            if last_state is not None:
+                self._restored_sample_time = last_state.attributes.get(
+                    "last_valid_sample"
+                )
+
+    @property
+    def native_value(self) -> float | None:
+        value = self.coordinator.data.soc_status.remaining_range
+        if value is not None and math.isfinite(value) and value >= 0:
+            return value
+        return self._restored_range
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        sample: datetime | None = self.coordinator.data.remaining_range_last_valid_at
+        return {
+            "last_valid_sample": sample.isoformat()
+            if sample is not None
+            else self._restored_sample_time,
+            "data_retained": self.coordinator.data.remaining_range_retained
+            or (
+                self.coordinator.data.soc_status.remaining_range is None
+                and self._restored_range is not None
+            ),
+        }

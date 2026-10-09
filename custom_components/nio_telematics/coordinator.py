@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import math
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from homeassistant.config_entries import ConfigEntry
@@ -146,10 +148,42 @@ class NioDataUpdateCoordinator(DataUpdateCoordinator[NioVehicleData]):
                     default=None,
                 ),
             )
+        # A change feed can be empty for many polls. Do not replace an actual
+        # range measurement with the sparse latest vehicle-status snapshot.
+        range_status = None
+        if energy_status is not None and _valid_range(energy_status.remaining_range):
+            range_status = energy_status
+        elif (
+            _valid_range(vehicle_status.remaining_range)
+            and vehicle_status.remaining_range > 0
+        ):
+            # The latest vehicle snapshot may contain a placeholder zero.
+            range_status = vehicle_status
+        previous = self.data
+        if range_status is not None:
+            remaining_range = range_status.remaining_range
+            range_last_valid_at = range_status.event_time
+            range_retained = False
+        elif previous is not None and _valid_range(previous.soc_status.remaining_range):
+            remaining_range = previous.soc_status.remaining_range
+            range_last_valid_at = previous.remaining_range_last_valid_at
+            range_retained = True
+        else:
+            remaining_range = None
+            range_last_valid_at = None
+            range_retained = False
+        soc_status = replace(soc_status, remaining_range=remaining_range)
         return NioVehicleData(
             vin=self._vin,
             soc_status=soc_status,
             fetched_at=datetime.now(UTC),
             telemetry=dict(self._telemetry),
             endpoint_status=endpoint_status,
+            remaining_range_last_valid_at=range_last_valid_at,
+            remaining_range_retained=range_retained,
         )
+
+
+def _valid_range(value: float | None) -> bool:
+    """Accept real zero from the energy feed, but no missing/nonfinite values."""
+    return value is not None and math.isfinite(value) and value >= 0

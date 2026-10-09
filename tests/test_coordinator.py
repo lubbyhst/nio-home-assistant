@@ -8,7 +8,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.config_entry_oauth2_flow import OAuth2TokenRequestReauthError
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
-from custom_components.nio_telematics.api import NioApiError
+from custom_components.nio_telematics.api import NioApiError, NioResourceNotFoundError
 from custom_components.nio_telematics.const import CONF_VIN
 from custom_components.nio_telematics.coordinator import NioDataUpdateCoordinator
 
@@ -43,3 +43,35 @@ async def test_temporary_refresh_failure_remains_retryable(hass: HomeAssistant) 
 
     with pytest.raises(UpdateFailed, match="temporarily unavailable"):
         await coordinator._async_update_data()
+
+
+async def test_range_survives_sparse_change_feed(hass: HomeAssistant) -> None:
+    """A missing energy event and a vehicle placeholder must not erase range."""
+    entry = MagicMock()
+    entry.data = {CONF_VIN: "LJNABC12345678901"}
+    client = MagicMock()
+    client.async_get_latest_vehicle_record = AsyncMock(
+        return_value={"soc": 0, "remaining_range": 0}
+    )
+    energy_records = iter([{"remaining_range": 213}, None])
+
+    async def get_change_record(_vin: str, resource: str) -> dict:
+        if resource == "soc_status":
+            record = next(energy_records)
+            if record is not None:
+                return record
+        raise NioResourceNotFoundError("No recent data")
+
+    client.async_get_change_record = get_change_record
+    client.async_get_odometer_report = AsyncMock(
+        side_effect=NioResourceNotFoundError("No recent data")
+    )
+    coordinator = NioDataUpdateCoordinator(hass, entry, client)
+    first = await coordinator._async_update_data()
+    assert first.soc_status.remaining_range == 213
+    assert not first.remaining_range_retained
+
+    coordinator.async_set_updated_data(first)
+    second = await coordinator._async_update_data()
+    assert second.soc_status.remaining_range == 213
+    assert second.remaining_range_retained

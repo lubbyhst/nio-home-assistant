@@ -3,6 +3,16 @@
 The changelog is the authoritative release history for this integration.
 Use this before releases and when opening PRs.
 
+## 0.1.1-dev.5
+
+- Retain the last valid official remaining-range reading when NIO's sparse
+  change feed omits it or the latest vehicle snapshot has no real range.
+- Restore the remaining-range sensor's last valid value after a Home Assistant
+  restart and expose whether its displayed value is retained.
+- Add a regression test for an energy record followed by an empty poll.
+- The integration's upstream SoC field remains unchanged; household-specific
+  range-to-charge calculation belongs in Home Assistant, not this integration.
+
 ## 0.1.1-dev.4
 
 - Treat NIO's HTTP-success `invalid_grant` token response as a rejected OAuth
