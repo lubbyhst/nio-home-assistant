@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
-import re
 import time
 from typing import Any
+from urllib.parse import quote
 
 from aiohttp import ClientError, ClientResponse
 from homeassistant.helpers.config_entry_oauth2_flow import (
@@ -16,25 +16,12 @@ from homeassistant.helpers.config_entry_oauth2_flow import (
 )
 
 from .const import TELEMATICS_PATH
-from .models import NioSocStatus
+from .models import NioSocStatus, merge_energy_records
+from .privacy import redact_debug_value as _redact_debug_value
+from .privacy import safe_endpoint as _safe_endpoint
 
 _LOGGER = logging.getLogger(__name__)
 
-_SENSITIVE_KEY_PARTS = (
-    "access_token",
-    "authorization",
-    "client_id",
-    "client_secret",
-    "code_verifier",
-    "latitude",
-    "longitude",
-    "refresh_token",
-    "token",
-    "vin",
-)
-_VIN_IN_TEXT = re.compile(
-    r"(?<![A-Z0-9])[A-HJ-NPR-Z0-9]{17}(?![A-Z0-9])", re.IGNORECASE
-)
 _SAFE_RESPONSE_HEADERS = {
     "content-type",
     "retry-after",
@@ -42,39 +29,21 @@ _SAFE_RESPONSE_HEADERS = {
     "x-ratelimit-remaining",
     "x-ratelimit-reset",
 }
-_MILLISECONDS_PER_SECOND = 1_000
 _SOC_WINDOW_CANDIDATES_SECONDS = (
-    12 * 60 * 60,
-    6 * 60 * 60,
-    3 * 60 * 60,
-    60 * 60,
-    30 * 60,
     10 * 60,
+    5 * 60,
 )
-
-
-def _redact_debug_value(value: Any, *, key: str = "") -> Any:
-    """Recursively redact credentials, vehicle IDs, and precise location data."""
-    normalized_key = key.casefold()
-    if any(part in normalized_key for part in _SENSITIVE_KEY_PARTS):
-        return "**REDACTED**"
-    if isinstance(value, dict):
-        return {
-            str(item_key): _redact_debug_value(item_value, key=str(item_key))
-            for item_key, item_value in value.items()
-        }
-    if isinstance(value, list):
-        return [_redact_debug_value(item) for item in value]
-    if isinstance(value, tuple):
-        return tuple(_redact_debug_value(item) for item in value)
-    if isinstance(value, str):
-        return _VIN_IN_TEXT.sub("**REDACTED_VIN**", value)
-    return value
-
-
-def _safe_endpoint(path: str) -> str:
-    """Return an endpoint path with any VIN removed."""
-    return _VIN_IN_TEXT.sub("{vin}", path)
+ON_DEMAND_OPERATION_IDS = {
+    "vehicle_status_history": "getVehicleStatusChanges",
+    "adas_snapshots": "getDlbSnapshot",
+    "adas_events": "getDlbEvent",
+    "extract_adas_snapshot": "extractDlbSnapshot",
+    "download_adas_event": "downloadDlbEvent",
+    "nomi_asr_files": "getASRFileList",
+    "vehicle_recalls": "getVehicleRecallHistory",
+    "recall_campaign": "getRecallCampaigns",
+}
+ON_DEMAND_OPERATIONS = tuple(ON_DEMAND_OPERATION_IDS)
 
 
 class NioApiError(Exception):
@@ -121,8 +90,13 @@ class NioApiClient:
         self,
         vin: str,
     ) -> NioSocStatus:
-        """Return the newest SoC change from NIO's largest accepted window."""
-        end_seconds = int(time.time())
+        """Return energy fields merged from newest to oldest change records."""
+        data = await self.async_get_change_record(vin, "soc_status")
+        return NioSocStatus.from_payload(data)
+
+    async def _async_get_soc_payload(self, vin: str) -> dict[str, Any]:
+        """Use the short millisecond window accepted by the live energy API."""
+        end_milliseconds = int(time.time()) * 1000
         path = f"{TELEMATICS_PATH}/vehicles/{vin}/soc_status/changes"
         windows = (
             (self._soc_window_seconds,)
@@ -131,14 +105,11 @@ class NioApiClient:
         )
         last_error: NioInvalidParameterError | None = None
         for window_seconds in windows:
-            end_milliseconds = end_seconds * _MILLISECONDS_PER_SECOND
             try:
                 payload = await self._async_get(
                     path,
                     params={
-                        "start_time": (
-                            end_milliseconds - window_seconds * _MILLISECONDS_PER_SECOND
-                        ),
+                        "start_time": end_milliseconds - window_seconds * 1000,
                         "end_time": end_milliseconds,
                     },
                 )
@@ -154,38 +125,26 @@ class NioApiClient:
             if last_error is not None:
                 raise last_error
             raise NioApiError("NIO did not accept a SoC query window")
-        data = payload.get("data")
-        if not isinstance(data, list) or not data:
-            raise NioApiError("NIO returned no SoC status records")
-        records = [item for item in data if isinstance(item, dict)]
-        if not records:
-            raise NioApiError("NIO returned an invalid SoC status payload")
-        _LOGGER.debug(
-            "NIO SoC change response shape: record_count=%d field_sets=%s",
-            len(records),
-            [sorted(item) for item in records[:10]],
-        )
-        statuses = [
-            NioSocStatus.from_payload(item)
-            for item in sorted(
-                records,
-                key=lambda item: item.get("sample_timestamp", 0),
-                reverse=True,
-            )
-        ]
-        return NioSocStatus.merge(*statuses)
+        return payload
 
     async def async_get_change_record(self, vin: str, resource: str) -> dict[str, Any]:
         """Return the newest record from a documented change endpoint."""
-        payload = await self._async_get(
-            f"{TELEMATICS_PATH}/vehicles/{vin}/{resource}/changes"
-        )
+        if resource == "soc_status":
+            payload = await self._async_get_soc_payload(vin)
+        else:
+            payload = await self._async_get(
+                f"{TELEMATICS_PATH}/vehicles/{vin}/{resource}/changes"
+            )
         data = payload.get("data")
-        if not isinstance(data, list) or not data:
+        if not isinstance(data, list):
+            raise NioApiError("NIO returned an invalid telemetry payload")
+        if not data:
             raise NioResourceNotFoundError("NIO returned no telemetry records")
         records = [item for item in data if isinstance(item, dict)]
         if not records:
             raise NioApiError("NIO returned an invalid telemetry payload")
+        if resource == "soc_status":
+            return merge_energy_records(*records)
         return max(records, key=lambda item: item.get("sample_timestamp", 0))
 
     async def async_get_latest_vehicle_record(self, vin: str) -> dict[str, Any]:
@@ -217,15 +176,118 @@ class NioApiClient:
         _LOGGER.debug("NIO latest vehicle response fields: %s", sorted(data))
         return NioSocStatus.from_payload(data)
 
-    async def _async_get(
-        self, path: str, *, params: dict[str, int] | None = None
+    async def async_call_on_demand(
+        self, operation: str, vin: str, **values: Any
     ) -> dict[str, Any]:
-        request_kwargs: dict[str, Any] = {"headers": {"Accept": "application/json"}}
+        """Call one allowlisted API operation without changing coordinator polling."""
+        operation_specs: dict[str, tuple[str, str, dict[str, str], tuple[str, ...]]] = {
+            "vehicle_status_history": (
+                "GET",
+                f"{TELEMATICS_PATH}/vehicles/{vin}/vehicle_status/changes",
+                {"start_time": "start_time", "end_time": "end_time"},
+                (),
+            ),
+            "adas_snapshots": (
+                "GET",
+                f"{TELEMATICS_PATH}/vehicles/{vin}/adas/snapshot",
+                {
+                    "start_ts": "startTs",
+                    "end_ts": "endTs",
+                    "limit": "limit",
+                    "offset": "offset",
+                },
+                (),
+            ),
+            "adas_events": (
+                "GET",
+                f"{TELEMATICS_PATH}/vehicles/{vin}/adas/event",
+                {
+                    "start_ts": "startTs",
+                    "end_ts": "endTs",
+                    "limit": "limit",
+                    "offset": "offset",
+                },
+                (),
+            ),
+            "extract_adas_snapshot": (
+                "POST",
+                f"{TELEMATICS_PATH}/vehicles/{vin}/adas/snapshot/extract",
+                {"uuid": "uuid"},
+                ("uuid",),
+            ),
+            "download_adas_event": (
+                "POST",
+                f"{TELEMATICS_PATH}/vehicles/{vin}/adas/event/download",
+                {"uuid": "uuid", "as_url": "asUrl"},
+                ("uuid",),
+            ),
+            "nomi_asr_files": (
+                "GET",
+                f"{TELEMATICS_PATH}/vehicles/{vin}/nomi/asr",
+                {"offset": "offset", "limit": "limit"},
+                (),
+            ),
+            "vehicle_recalls": (
+                "GET",
+                f"{TELEMATICS_PATH}/aftersales/vehicles/{vin}/recalls",
+                {},
+                (),
+            ),
+            "recall_campaign": ("GET", "", {}, ("campaign_no",)),
+        }
+        if operation not in operation_specs:
+            raise ValueError(f"Unsupported NIO operation: {operation}")
+        method, path, query_names, required = operation_specs[operation]
+        allowed = set(query_names) | set(required)
+        if operation == "recall_campaign":
+            allowed.add("accept_language")
+        if set(values) - allowed:
+            raise ValueError(f"Unsupported parameters for {operation}")
+        if any(values.get(name) is None for name in required):
+            raise ValueError(f"Missing required parameters for {operation}")
+
+        headers = {}
+        if language := values.get("accept_language"):
+            headers["Accept-Language"] = str(language)
+        if operation == "recall_campaign":
+            path = (
+                f"{TELEMATICS_PATH}/aftersales/recall_campaigns/"
+                f"{quote(str(values['campaign_no']), safe='')}"
+            )
+        params = {
+            api_name: (
+                str(values[service_name]).lower()
+                if isinstance(values[service_name], bool)
+                else values[service_name]
+            )
+            for service_name, api_name in query_names.items()
+            if service_name in values
+        }
+        return await self._async_request(
+            method, path, params=params or None, headers=headers
+        )
+
+    async def _async_get(
+        self, path: str, *, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        return await self._async_request("GET", path, params=params)
+
+    async def _async_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        request_kwargs: dict[str, Any] = {
+            "headers": {"Accept": "application/json", **(headers or {})}
+        }
         if params is not None:
             request_kwargs["params"] = params
         try:
             response = await self._oauth_session.async_request(
-                "GET",
+                method,
                 f"{self._base_url}{path}",
                 **request_kwargs,
             )
@@ -233,7 +295,9 @@ class NioApiClient:
             # HA's OAuth2Session starts the native reauth flow for this error.
             raise
         except OAuth2TokenRequestTransientError as err:
-            raise NioApiError("NIO OAuth token service is temporarily unavailable") from err
+            raise NioApiError(
+                "NIO OAuth token service is temporarily unavailable"
+            ) from err
         except OAuth2TokenRequestError as err:
             raise NioApiError("NIO OAuth token request failed") from err
         except ClientError as err:
@@ -266,18 +330,25 @@ class NioApiClient:
             type(json_error).__name__ if json_error else None,
         )
 
-        await self._raise_for_status(response)
+        # Authentication, throttling, and server failures take precedence.
+        # NIO also sends typed business errors with HTTP 400/404, so inspect
+        # those envelopes before falling back to the generic HTTP error.
+        if response.status not in {400, 404}:
+            await self._raise_for_status(response)
         if json_error is not None:
+            await self._raise_for_status(response)
             raise NioApiError("NIO returned a non-JSON response") from json_error
         if not isinstance(payload, dict):
+            await self._raise_for_status(response)
             raise NioApiError("NIO returned an invalid response envelope")
         result_code = payload.get("result_code")
-        if result_code == "access_denied":
+        if result_code in {"access_denied", "permission_denied", "forbidden"}:
             raise NioPermissionError("NIO OAuth grant lacks the required scope")
         if result_code == "resource_not_found":
             raise NioResourceNotFoundError("NIO resource was not found")
         if result_code == "invalid_param":
             raise NioInvalidParameterError("NIO rejected request parameters")
+        await self._raise_for_status(response)
         if result_code != "success":
             raise NioApiError(
                 f"NIO request failed: {payload.get('result_code', 'unknown')}"

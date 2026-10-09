@@ -9,6 +9,11 @@ models = load_module("models")
 
 
 class TestNioModels(unittest.TestCase):
+    def test_live_remaining_range_is_already_in_kilometers(self) -> None:
+        status = models.NioSocStatus.from_payload({"remaining_range": 200.5})
+
+        self.assertEqual(status.remaining_range, 200.5)
+
     def test_soc_status_parses_verified_fields(self) -> None:
         status = models.NioSocStatus.from_payload(
             {
@@ -39,6 +44,17 @@ class TestNioModels(unittest.TestCase):
         self.assertIsNone(status.remaining_range)
         self.assertIsNone(status.charging_state)
         self.assertIsNone(status.event_time)
+
+    def test_remaining_range_preserves_kilometers_and_omits_invalid_sentinels(
+        self,
+    ) -> None:
+        status = models.NioSocStatus.from_payload({"remaining_range": 204.5})
+        invalid_status = models.NioSocStatus.from_payload(
+            {"remaining_range": 0xFFFFFFFE}
+        )
+
+        self.assertEqual(status.remaining_range, 204.5)
+        self.assertIsNone(invalid_status.remaining_range)
 
     def test_numeric_enum_is_normalized_to_string(self) -> None:
         status = models.NioSocStatus.from_payload({"chrg_state": 3})
@@ -81,3 +97,20 @@ class TestNioModels(unittest.TestCase):
         for vin in ("short", "LJNABC1234567890I", "LJNABC1234567890O"):
             with self.subTest(vin=vin), self.assertRaises(ValueError):
                 models.normalize_vin(vin)
+
+
+def test_nonfinite_energy_numbers_are_unknown() -> None:
+    for raw in ("NaN", "Infinity", float("-inf")):
+        status = models.NioSocStatus.from_payload({"soc": raw, "remaining_range": raw})
+        assert status.soc is None
+        assert status.remaining_range is None
+
+
+def test_negative_range_cannot_erase_valid_cached_energy() -> None:
+    merged = models.merge_energy_records(
+        {"remaining_range": 210, "sample_timestamp": 1000},
+        {"remaining_range": -1, "sample_timestamp": 2000},
+    )
+    status = models.NioSocStatus.from_payload(merged)
+    assert status.remaining_range == 210
+    assert status.remaining_range_sample_time == datetime.fromtimestamp(1000, UTC)

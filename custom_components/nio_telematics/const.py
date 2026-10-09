@@ -21,5 +21,45 @@ CONF_SCOPE_REVISION: Final = "scope_revision"
 # rejects the entire request if it contains a scope unavailable to that app.
 OAUTH_SCOPE_REVISION: Final = 2
 
-DEFAULT_SCAN_INTERVAL: Final = timedelta(minutes=10)
+DEFAULT_SCAN_INTERVAL: Final = timedelta(minutes=5)
 ATTR_EVENT_TIME: Final = "event_time"
+
+CHANGE_ENDPOINTS: Final[tuple[str, ...]] = (
+    "door_status",
+    "fridge_status",
+    "light_status",
+    "window_status",
+    "driving_data",
+    "vehicle_status_changes",
+    "position_status",
+    "trip_status",
+    "cell_status",
+    "extremum_data",
+    "soc_status",
+    "heating_status",
+    "hvac_status",
+    "driving_motor",
+    "alarm_signal",
+)
+CHANGE_ENDPOINT_RESOURCES: Final[dict[str, str]] = {
+    "vehicle_status_changes": "vehicle_status",
+}
+SUPPORTED_ENDPOINTS: Final[tuple[str, ...]] = (
+    "door_status",
+    "fridge_status",
+    "light_status",
+    "window_status",
+    "driving_data",
+    "vehicle_status_changes",
+    "vehicle_status",
+    "position_status",
+    "trip_status",
+    "cell_status",
+    "extremum_data",
+    "soc_status",
+    "heating_status",
+    "hvac_status",
+    "driving_motor",
+    "alarm_signal",
+    "odometer_report",
+)
