@@ -5,7 +5,8 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
+from functools import partial
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -25,8 +26,10 @@ from homeassistant.const import (
     UnitOfSpeed,
     UnitOfTemperature,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.recorder import DATA_INSTANCE
+from sqlalchemy.exc import SQLAlchemyError
 
 from .availability import availability_attributes, overall_availability
 from .coordinator import NioDataUpdateCoordinator
@@ -530,19 +533,38 @@ class NioRangeSensor(NioSensorEntity, RestoreSensor):
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_data = await self.async_get_last_sensor_data()
-        if last_data is None:
+        if last_data is not None:
+            value = _range_number(last_data.native_value)
+            if value is not None:
+                self._restored_range = value
+                last_state = await self.async_get_last_state()
+                if last_state is not None:
+                    self._restored_sample_time = last_state.attributes.get(
+                        "last_valid_sample"
+                    )
+                return
+        # Migration from older releases: their final state can be 'unknown'
+        # although Recorder still has a recent real reading. Query only this
+        # entity, once, and only when Recorder is available.
+        if DATA_INSTANCE not in self.hass.data or self.entity_id is None:
             return
+        from homeassistant.components.recorder import get_instance, history
+
         try:
-            value = float(last_data.native_value)
-        except (TypeError, ValueError):
-            return
-        if math.isfinite(value) and value >= 0:
-            self._restored_range = value
-            last_state = await self.async_get_last_state()
-            if last_state is not None:
-                self._restored_sample_time = last_state.attributes.get(
-                    "last_valid_sample"
+            states = await get_instance(self.hass).async_add_executor_job(
+                partial(
+                    history.get_significant_states,
+                    self.hass,
+                    datetime.now(UTC) - timedelta(days=7),
+                    entity_ids=[self.entity_id],
+                    include_start_time_state=False,
+                    no_attributes=True,
                 )
+            )
+        except (KeyError, RuntimeError, SQLAlchemyError):
+            return
+        if result := _last_recorded_range(states.get(self.entity_id, [])):
+            self._restored_range, self._restored_sample_time = result
 
     @property
     def native_value(self) -> float | None:
@@ -564,3 +586,20 @@ class NioRangeSensor(NioSensorEntity, RestoreSensor):
                 and self._restored_range is not None
             ),
         }
+
+
+def _range_number(value: Any) -> float | None:
+    """Parse a finite nonnegative reading; reject unavailable/unknown states."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) and number >= 0 else None
+
+
+def _last_recorded_range(states: list[State]) -> tuple[float, str] | None:
+    """Skip newer unknowns and return the last actual Recorder sample."""
+    for state in reversed(states):
+        if (value := _range_number(state.state)) is not None:
+            return value, state.last_changed.isoformat()
+    return None

@@ -41,7 +41,7 @@ data, and use it at your own risk.
 > report is a curiosity; a fleet of matching reports is evidence. EU NIO
 > owners, rally—we are legion, and we need you. 😄
 
-Current development release (`0.1.1-dev.5`):
+Current development release (`0.1.1-dev.6`):
 
 - polls every documented read-only telemetry category that can provide useful
   Home Assistant state: body, dynamics, location, trip, energy, cabin,
@@ -67,6 +67,9 @@ is marked with `data_retained` and `last_valid_sample` attributes. It may be
 stale; check freshness before using it for charging decisions. The integration
 does **not** convert range into SoC: that calibration is specific to a car and
 belongs in the owner's Home Assistant configuration.
+`0.1.1-dev.6` also recovers a numeric range from the sensor's own recent
+Recorder history on the first upgrade when an older version had ended at
+`unknown`. This migration fallback is skipped if Recorder is unavailable.
 
 Most detailed entities are disabled by default to avoid flooding a new Home
 Assistant installation. **Disabled does not mean broken or denied**; it is only

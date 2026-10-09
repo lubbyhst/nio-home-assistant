@@ -3,6 +3,14 @@
 The changelog is the authoritative release history for this integration.
 Use this before releases and when opening PRs.
 
+## 0.1.1-dev.6
+
+- On the first upgrade from older versions, recover the last numeric range
+  from that sensor's own recent Home Assistant Recorder history if its final
+  pre-upgrade state was `unknown`.
+- Keep the history lookup optional and limited to the range entity; add tests
+  proving newer `unknown` records do not displace the last real reading.
+
 ## 0.1.1-dev.5
 
 - Retain the last valid official remaining-range reading when NIO's sparse
